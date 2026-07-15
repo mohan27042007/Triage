@@ -1,4 +1,4 @@
-"""OpenAI-powered classification for the local-first Triage prototype."""
+"""OpenAI-powered classification for the local-first Triage prototype using GPT-5.6-sol."""
 
 import json
 import os
@@ -9,7 +9,7 @@ from openai import OpenAI
 
 load_dotenv()
 
-MODEL = "gpt-5.6"
+MODEL = "gpt-5.6-sol"
 
 SYSTEM_PROMPT = """You are the classification engine for Triage, a student inbox assistant.
 
