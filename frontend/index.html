@@ -33,6 +33,17 @@
         </dl>
       </section>
       <p id="error" class="error" role="alert"></p>
+
+      <section class="queue-section" aria-labelledby="queue-title">
+        <div class="queue-heading">
+          <div>
+            <p class="eyebrow">ACTION QUEUE</p>
+            <h2 id="queue-title">Open obligations</h2>
+          </div>
+          <button id="refresh-queue" class="secondary" type="button">Refresh queue</button>
+        </div>
+        <div id="queue" class="queue" aria-live="polite"></div>
+      </section>
     </main>
     <script src="app.js"></script>
   </body>
