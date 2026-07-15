@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from classifier import classify
@@ -31,16 +31,22 @@ async def ingest(request: Request) -> dict:
     try:
         if content_type.startswith("application/json"):
             payload = await request.json()
-            if not isinstance(payload, dict) or not isinstance(payload.get("text"), str):
+            if not isinstance(payload, dict) or not isinstance(
+                payload.get("text"), str
+            ):
                 raise ValueError('JSON requests must use {"text": "..."}.')
             text = payload["text"]
         elif content_type.startswith("multipart/form-data"):
             form = await request.form()
             uploaded_file = form.get("file")
-            if uploaded_file is None or not getattr(uploaded_file, "filename", None):
-                raise ValueError("Upload a .txt file using the 'file' field.")
+            if not isinstance(uploaded_file, UploadFile) or not uploaded_file.filename:
+                raise ValueError(
+                    "Upload a .txt file using the 'file' field."
+                )
             if Path(uploaded_file.filename).suffix.lower() != ".txt":
-                raise ValueError("Only .txt files are supported in this local-first slice.")
+                raise ValueError(
+                    "Only .txt files are supported in this local-first slice."
+                )
             try:
                 text = (await uploaded_file.read()).decode("utf-8")
             except UnicodeDecodeError as exc:
