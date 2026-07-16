@@ -33,7 +33,7 @@ def initialize_database() -> None:
         )
 
 
-def create_item(text: str, classification: dict[str, Any]) -> dict[str, Any]:
+def create_item(text: str, classification: dict[str, Any]) -> dict[str, Any] | None:
     """Persist one classified item and return the stored record."""
     created_at = datetime.now().astimezone().isoformat()
     with _connection() as connection:
@@ -52,7 +52,7 @@ def create_item(text: str, classification: dict[str, Any]) -> dict[str, Any]:
             ),
         )
         item_id = cursor.lastrowid
-    return get_item(item_id)
+    return get_item(item_id) if item_id else None
 
 
 def get_item(item_id: int) -> dict[str, Any] | None:

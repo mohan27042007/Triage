@@ -75,7 +75,7 @@ async function loadQueue() {
 }
 
 function queueItem(item) {
-  const summary = item.text.length > 150 ? `${item.text.slice(0, 150)}…` : item.text;
+  const summary = item.text.length > 150 ? `${item.text.slice(0, 150)}...` : item.text;
   const mandatory = item.mandatory === true ? "Mandatory" : item.mandatory === false ? "Optional" : "Requirement unclear";
   const deadline = item.deadline || "No explicit deadline";
   return `
