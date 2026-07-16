@@ -7,8 +7,8 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-from classifier import classify
-from database import create_item, get_open_obligations, initialize_database, mark_done
+from .classifier import classify
+from .database import create_item, get_open_obligations, initialize_database, mark_done
 
 app = FastAPI(title="Triage API", version="0.1.0")
 
