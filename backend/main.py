@@ -59,6 +59,9 @@ async def ingest(request: Request) -> dict:
         else:
             raise ValueError("Use application/json or multipart/form-data.")
 
+        if len(text) > 5000:
+            raise ValueError("Text is too long for classification.")
+
         classification = classify(text)
         return create_item(text, classification)
     except ValueError as exc:
