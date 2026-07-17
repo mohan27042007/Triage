@@ -25,6 +25,7 @@ dt { font-size: .75rem; font-weight: 800; text-transform: uppercase; letter-spac
 dd { margin: .25rem 0 0; color: #f6f3ec; }
 .error { min-height: 1.2rem; color: #ff9b8a; }
 .queue-section { margin-top: 3rem; }
+.pending-section { margin-top: 3rem; }
 .queue-heading { display: flex; align-items: end; justify-content: space-between; gap: 1rem; margin-bottom: 1.25rem; }
 .queue-group { margin: 1.25rem 0; }
 .queue-group h3 { font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; color: #bbc0c8; }
@@ -35,6 +36,10 @@ dd { margin: .25rem 0 0; color: #f6f3ec; }
 .metadata { display: flex; flex-wrap: wrap; gap: .6rem; color: #bbc0c8; font-size: .85rem; }
 .mandatory { border: 1px solid #7b2d22; border-radius: 999px; padding: .1rem .4rem; color: #ffd7d0; }
 .done-button { width: auto; margin-top: .5rem; padding: .45rem .7rem; background: #4f9e7a; }
+.pending-action { border: 1px solid #7b5a20; border-radius: 12px; background: #211d16; padding: 1rem; margin: .75rem 0; }
+.pending-buttons { display: flex; gap: .6rem; }
+.pending-buttons button { width: auto; margin-top: .25rem; padding: .45rem .7rem; }
+.approve-button { background: #4f9e7a; }
 .study-section { margin-top: 3rem; }
 .study-section form { display: grid; gap: .6rem; }
 .study-section button { margin-top: .5rem; }

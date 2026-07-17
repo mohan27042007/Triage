@@ -37,7 +37,10 @@ The API will run at `http://localhost:8000`; visit `http://localhost:8000/docs` 
 
 - `POST /ingest` — accepts JSON (`{"text":"..."}`) or a multipart UTF-8 `.txt` upload (`file`); classifies and stores the item.
 - `GET /queue` — returns open obligations grouped as `Immediate`, `This Week`, and `Later`.
-- `POST /queue/{id}/done` — marks an open obligation as done.
+- `POST /queue/{id}/done` — creates a pending request to mark an open obligation done; it does not change the item yet.
+- `GET /pending` — lists human-review actions awaiting a decision.
+- `POST /pending/{id}/approve` — applies an approved pending action (currently `mark_done`).
+- `POST /pending/{id}/reject` — rejects a pending action without applying it.
 - `POST /study/upload` — accepts UTF-8 `.txt` files named `question_bank` and `unit_notes`, then builds and persists a ranked study plan.
 - `GET /study/plan` — returns the latest persisted study topic list, ordered by weight.
 - `GET /health` — confirms the API is running.
@@ -57,8 +60,9 @@ Open `http://localhost:3000` in your browser. Paste text or upload a UTF-8 `.txt
 
 1. Start the backend and frontend as above.
 2. Submit the obligation example below. It should appear in **Immediate** or **This Week**, depending on the current date and extracted deadline.
-3. Select **Mark done**. The item should disappear from the queue after refresh.
-4. Submit the study-material example. It should classify correctly but should not appear in the Action Queue.
+3. Select **Mark done**. The item should remain in the queue and appear under **Human Review**.
+4. Approve it. The item should then disappear from the queue; rejecting it leaves the item open.
+5. Submit the study-material example. It should classify correctly but should not appear in the Action Queue.
 
 ### Study Plan smoke test
 

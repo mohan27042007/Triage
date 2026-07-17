@@ -10,10 +10,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from classifier import build_study_plan, classify
 from database import (
     create_item,
+    create_pending_action,
+    approve_pending_action,
+    get_item,
     get_open_obligations,
+    get_pending_actions,
     get_study_plan,
     initialize_database,
-    mark_done,
+    reject_pending_action,
     replace_study_plan,
 )
 
@@ -87,11 +91,46 @@ def queue() -> dict[str, list[dict]]:
 
 
 @app.post("/queue/{item_id}/done")
-def complete_queue_item(item_id: int) -> dict[str, int | str]:
-    """Mark one open obligation as done."""
-    if not mark_done(item_id):
+def request_queue_item_completion(item_id: int) -> dict:
+    """Request human approval before marking one queue item done."""
+    item = get_item(item_id)
+    if not item or item["category"] != "Obligation" or item["status"] != "open":
         raise HTTPException(status_code=404, detail="Open queue item not found.")
-    return {"id": item_id, "status": "done"}
+    return create_pending_action(
+        item_id=item_id,
+        action_type="mark_done",
+        payload={
+            "message": f"Mark '{item['text'][:120]}' as done?",
+            "item_text": item["text"],
+        },
+    )
+
+
+@app.get("/pending")
+def pending_actions() -> dict[str, list[dict]]:
+    """List actions that require a student's decision."""
+    return {"actions": get_pending_actions()}
+
+
+@app.post("/pending/{action_id}/approve")
+def approve_action(action_id: int) -> dict:
+    """Approve a pending action and apply its underlying local change."""
+    try:
+        action = approve_pending_action(action_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not action:
+        raise HTTPException(status_code=404, detail="Pending action not found or no longer applicable.")
+    return action
+
+
+@app.post("/pending/{action_id}/reject")
+def reject_action(action_id: int) -> dict:
+    """Reject a pending action without applying its underlying change."""
+    action = reject_pending_action(action_id)
+    if not action:
+        raise HTTPException(status_code=404, detail="Pending action not found.")
+    return action
 
 
 @app.post("/study/upload")

@@ -9,6 +9,7 @@ const refreshQueueButton = document.querySelector("#refresh-queue");
 const studyForm = document.querySelector("#study-form");
 const studyPlan = document.querySelector("#study-plan");
 const studyError = document.querySelector("#study-error");
+const pendingActions = document.querySelector("#pending-actions");
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -100,7 +101,7 @@ queue.addEventListener("click", async (event) => {
     const response = await fetch(`http://localhost:8000/queue/${doneButton.dataset.itemId}/done`, { method: "POST" });
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || "Could not update this item.");
-    doneButton.closest(".queue-item").remove();
+    loadPendingActions();
     loadQueue();
   } catch (requestError) {
     error.textContent = requestError.message;
@@ -116,6 +117,7 @@ function escapeHtml(value) {
 
 loadQueue();
 loadStudyPlan();
+loadPendingActions();
 
 studyForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -167,3 +169,53 @@ function renderStudyPlan(topics) {
     </details>
   `).join("");
 }
+
+async function loadPendingActions() {
+  try {
+    const response = await fetch("http://localhost:8000/pending");
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "Could not load pending actions.");
+    renderPendingActions(data.actions);
+  } catch (requestError) {
+    pendingActions.innerHTML = `<p class="error">${escapeHtml(requestError.message)}</p>`;
+  }
+}
+
+function renderPendingActions(actions) {
+  if (!actions.length) {
+    pendingActions.innerHTML = "<p class=\"muted\">No actions are waiting for review.</p>";
+    return;
+  }
+  pendingActions.innerHTML = actions.map((action) => `
+    <article class="pending-action" data-action-id="${action.id}">
+      <p class="summary">${escapeHtml(action.payload.message)}</p>
+      <p class="muted">Triage will not make this change until you approve it.</p>
+      <div class="pending-buttons">
+        <button class="approve-button" type="button" data-action-id="${action.id}">Approve</button>
+        <button class="reject-button secondary" type="button" data-action-id="${action.id}">Reject</button>
+      </div>
+    </article>
+  `).join("");
+}
+
+pendingActions.addEventListener("click", async (event) => {
+  const actionButton = event.target.closest(".approve-button, .reject-button");
+  if (!actionButton) return;
+
+  const decision = actionButton.classList.contains("approve-button") ? "approve" : "reject";
+  actionButton.disabled = true;
+  try {
+    const response = await fetch(
+      `http://localhost:8000/pending/${actionButton.dataset.actionId}/${decision}`,
+      { method: "POST" },
+    );
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "Could not update this action.");
+    loadPendingActions();
+    loadQueue();
+    loadStudyPlan();
+  } catch (requestError) {
+    error.textContent = requestError.message;
+    actionButton.disabled = false;
+  }
+});

@@ -12,6 +12,7 @@ DATABASE_PATH = Path(__file__).with_name("triage.db")
 def _connection() -> sqlite3.Connection:
     connection = sqlite3.connect(DATABASE_PATH)
     connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA foreign_keys = ON")
     return connection
 
 
@@ -40,6 +41,19 @@ def initialize_database() -> None:
                 weight INTEGER NOT NULL,
                 subtopics TEXT NOT NULL,
                 created_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS pending_actions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                item_id INTEGER NOT NULL,
+                action_type TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (item_id) REFERENCES items(id)
             )
             """
         )
@@ -93,6 +107,84 @@ def mark_done(item_id: int) -> bool:
     return cursor.rowcount == 1
 
 
+def create_pending_action(
+    item_id: int, action_type: str, payload: dict[str, Any]
+) -> dict[str, Any]:
+    """Create one pending action, or reuse an identical action awaiting review."""
+    with _connection() as connection:
+        existing = connection.execute(
+            """
+            SELECT * FROM pending_actions
+            WHERE item_id = ? AND action_type = ? AND status = 'pending'
+            """,
+            (item_id, action_type),
+        ).fetchone()
+        if existing:
+            return _row_to_pending_action(existing)
+
+        cursor = connection.execute(
+            """
+            INSERT INTO pending_actions (item_id, action_type, payload, status, created_at)
+            VALUES (?, ?, ?, 'pending', ?)
+            """,
+            (item_id, action_type, json.dumps(payload), datetime.now().astimezone().isoformat()),
+        )
+        row = connection.execute(
+            "SELECT * FROM pending_actions WHERE id = ?", (cursor.lastrowid,)
+        ).fetchone()
+    return _row_to_pending_action(row)
+
+
+def get_pending_actions() -> list[dict[str, Any]]:
+    with _connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT pending_actions.*, items.text AS item_text
+            FROM pending_actions
+            JOIN items ON items.id = pending_actions.item_id
+            WHERE pending_actions.status = 'pending'
+            ORDER BY pending_actions.created_at ASC
+            """
+        ).fetchall()
+    return [_row_to_pending_action(row) for row in rows]
+
+
+def approve_pending_action(action_id: int) -> dict[str, Any] | None:
+    """Apply a pending action exactly once and record its approval."""
+    with _connection() as connection:
+        action = connection.execute(
+            "SELECT * FROM pending_actions WHERE id = ? AND status = 'pending'", (action_id,)
+        ).fetchone()
+        if not action:
+            return None
+        if action["action_type"] != "mark_done":
+            raise ValueError(f"Unsupported pending action: {action['action_type']}")
+
+        completed = connection.execute(
+            "UPDATE items SET status = 'done' WHERE id = ? AND status = 'open'", (action["item_id"],)
+        )
+        if completed.rowcount != 1:
+            return None
+        connection.execute(
+            "UPDATE pending_actions SET status = 'approved' WHERE id = ?", (action_id,)
+        )
+        updated = connection.execute("SELECT * FROM pending_actions WHERE id = ?", (action_id,)).fetchone()
+    return _row_to_pending_action(updated)
+
+
+def reject_pending_action(action_id: int) -> dict[str, Any] | None:
+    """Reject a pending action without applying its underlying change."""
+    with _connection() as connection:
+        cursor = connection.execute(
+            "UPDATE pending_actions SET status = 'rejected' WHERE id = ? AND status = 'pending'",
+            (action_id,),
+        )
+        if cursor.rowcount != 1:
+            return None
+        updated = connection.execute("SELECT * FROM pending_actions WHERE id = ?", (action_id,)).fetchone()
+    return _row_to_pending_action(updated)
+
+
 def replace_study_plan(topics: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Store the latest study plan, replacing the previous local plan."""
     created_at = datetime.now().astimezone().isoformat()
@@ -132,3 +224,9 @@ def _row_to_item(row: sqlite3.Row) -> dict[str, Any]:
     item = dict(row)
     item["mandatory"] = None if item["mandatory"] is None else bool(item["mandatory"])
     return item
+
+
+def _row_to_pending_action(row: sqlite3.Row) -> dict[str, Any]:
+    action = dict(row)
+    action["payload"] = json.loads(action["payload"])
+    return action
