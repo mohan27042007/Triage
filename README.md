@@ -38,6 +38,8 @@ The API will run at `http://localhost:8000`; visit `http://localhost:8000/docs` 
 - `POST /ingest` — accepts JSON (`{"text":"..."}`) or a multipart UTF-8 `.txt` upload (`file`); classifies and stores the item.
 - `GET /queue` — returns open obligations grouped as `Immediate`, `This Week`, and `Later`.
 - `POST /queue/{id}/done` — marks an open obligation as done.
+- `POST /study/upload` — accepts UTF-8 `.txt` files named `question_bank` and `unit_notes`, then builds and persists a ranked study plan.
+- `GET /study/plan` — returns the latest persisted study topic list, ordered by weight.
 - `GET /health` — confirms the API is running.
 
 ### Frontend
@@ -57,6 +59,13 @@ Open `http://localhost:3000` in your browser. Paste text or upload a UTF-8 `.txt
 2. Submit the obligation example below. It should appear in **Immediate** or **This Week**, depending on the current date and extracted deadline.
 3. Select **Mark done**. The item should disappear from the queue after refresh.
 4. Submit the study-material example. It should classify correctly but should not appear in the Action Queue.
+
+### Study Plan smoke test
+
+1. Create a small `question_bank.txt` with several questions that repeat a few topics, plus matching `unit_notes.txt`.
+2. In the Study Plan section, upload both files and select **Build study plan**.
+3. Confirm the result shows ranked topics, a 1–10 weight, and an expandable outline for each topic.
+4. Restart the API and refresh the page; the latest study plan should still appear.
 
 ### Manual smoke-test messages
 

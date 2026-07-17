@@ -35,3 +35,12 @@ dd { margin: .25rem 0 0; color: #f6f3ec; }
 .metadata { display: flex; flex-wrap: wrap; gap: .6rem; color: #bbc0c8; font-size: .85rem; }
 .mandatory { border: 1px solid #7b2d22; border-radius: 999px; padding: .1rem .4rem; color: #ffd7d0; }
 .done-button { width: auto; margin-top: .5rem; padding: .45rem .7rem; background: #4f9e7a; }
+.study-section { margin-top: 3rem; }
+.study-section form { display: grid; gap: .6rem; }
+.study-section button { margin-top: .5rem; }
+.study-topic { border: 1px solid #313743; border-radius: 12px; background: #191c24; padding: .9rem 1rem; margin: .75rem 0; }
+.study-topic summary { cursor: pointer; display: flex; justify-content: space-between; gap: 1rem; font-weight: 700; }
+.weight { color: #4f9e7a; font: .8rem ui-monospace, monospace; }
+.weight-track { height: .35rem; margin-top: .8rem; border-radius: 999px; background: #313743; overflow: hidden; }
+.weight-track span { display: block; height: 100%; border-radius: inherit; background: #4f9e7a; }
+.study-topic ul { color: #bbc0c8; margin-bottom: 0; }

@@ -7,8 +7,15 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-from classifier import classify
-from database import create_item, get_open_obligations, initialize_database, mark_done
+from classifier import build_study_plan, classify
+from database import (
+    create_item,
+    get_open_obligations,
+    get_study_plan,
+    initialize_database,
+    mark_done,
+    replace_study_plan,
+)
 
 app = FastAPI(title="Triage API", version="0.1.0")
 
@@ -87,6 +94,30 @@ def complete_queue_item(item_id: int) -> dict[str, int | str]:
     return {"id": item_id, "status": "done"}
 
 
+@app.post("/study/upload")
+async def upload_study_materials(request: Request) -> dict[str, list[dict]]:
+    """Build and persist a topic-ranked plan from two local text files."""
+    if not request.headers.get("content-type", "").startswith("multipart/form-data"):
+        raise HTTPException(status_code=400, detail="Use multipart/form-data with both study files.")
+
+    try:
+        form = await request.form()
+        question_bank = await _read_text_upload(form.get("question_bank"), "question_bank")
+        unit_notes = await _read_text_upload(form.get("unit_notes"), "unit_notes")
+        topics = build_study_plan(question_bank, unit_notes)
+        return {"topics": replace_study_plan(topics)}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/study/plan")
+def study_plan() -> dict[str, list[dict]]:
+    """Return the persisted, highest-priority-first study topics."""
+    return {"topics": get_study_plan()}
+
+
 def _queue_group(item: dict) -> str:
     """Assign a queue group without guessing when a model deadline is unclear."""
     deadline_date = _parse_deadline(item.get("deadline"))
@@ -127,3 +158,15 @@ def _parse_deadline(deadline: str | None) -> date | None:
     today = date.today()
     candidate = parsed.replace(year=today.year)
     return candidate if candidate >= today else candidate.replace(year=today.year + 1)
+
+
+async def _read_text_upload(uploaded_file: object, field_name: str) -> str:
+    """Validate and read one required UTF-8 .txt upload."""
+    if not hasattr(uploaded_file, "filename") or not hasattr(uploaded_file, "read"):
+        raise ValueError(f"Upload a .txt file using the '{field_name}' field.")
+    if not uploaded_file.filename or Path(uploaded_file.filename).suffix.lower() != ".txt":
+        raise ValueError(f"The '{field_name}' file must use the .txt extension.")
+    try:
+        return (await uploaded_file.read()).decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"The '{field_name}' file must be UTF-8 encoded.") from exc

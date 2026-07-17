@@ -44,6 +44,21 @@
         </div>
         <div id="queue" class="queue" aria-live="polite"></div>
       </section>
+
+      <section class="study-section" aria-labelledby="study-title">
+        <p class="eyebrow">STUDY PLAN</p>
+        <h2 id="study-title">Rank the topics worth studying</h2>
+        <p class="intro">Upload a question bank and its unit notes. Triage returns a topic outline, never full answers.</p>
+        <form id="study-form">
+          <label for="question-bank">Question bank (.txt)</label>
+          <input id="question-bank" name="question_bank" type="file" accept=".txt,text/plain" required />
+          <label for="unit-notes">Unit notes (.txt)</label>
+          <input id="unit-notes" name="unit_notes" type="file" accept=".txt,text/plain" required />
+          <button type="submit">Build study plan</button>
+        </form>
+        <p id="study-error" class="error" role="alert"></p>
+        <div id="study-plan" class="study-plan" aria-live="polite"></div>
+      </section>
     </main>
     <script src="app.js"></script>
   </body>

@@ -1,6 +1,7 @@
 """Small SQLite persistence layer for the local-first Triage prototype."""
 
 import sqlite3
+import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,17 @@ def initialize_database() -> None:
                 source TEXT NOT NULL DEFAULT 'manual',
                 created_at TEXT NOT NULL,
                 status TEXT NOT NULL DEFAULT 'open'
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS study_plans (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                topic TEXT NOT NULL,
+                weight INTEGER NOT NULL,
+                subtopics TEXT NOT NULL,
+                created_at TEXT NOT NULL
             )
             """
         )
@@ -79,6 +91,41 @@ def mark_done(item_id: int) -> bool:
             "UPDATE items SET status = 'done' WHERE id = ? AND status = 'open'", (item_id,)
         )
     return cursor.rowcount == 1
+
+
+def replace_study_plan(topics: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Store the latest study plan, replacing the previous local plan."""
+    created_at = datetime.now().astimezone().isoformat()
+    with _connection() as connection:
+        connection.execute("DELETE FROM study_plans")
+        connection.executemany(
+            """
+            INSERT INTO study_plans (topic, weight, subtopics, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            [
+                (topic["topic"], topic["weight"], json.dumps(topic["subtopics"]), created_at)
+                for topic in topics
+            ],
+        )
+    return get_study_plan()
+
+
+def get_study_plan() -> list[dict[str, Any]]:
+    with _connection() as connection:
+        rows = connection.execute(
+            "SELECT * FROM study_plans ORDER BY weight DESC, id ASC"
+        ).fetchall()
+    return [
+        {
+            "id": row["id"],
+            "topic": row["topic"],
+            "weight": row["weight"],
+            "subtopics": json.loads(row["subtopics"]),
+            "created_at": row["created_at"],
+        }
+        for row in rows
+    ]
 
 
 def _row_to_item(row: sqlite3.Row) -> dict[str, Any]:

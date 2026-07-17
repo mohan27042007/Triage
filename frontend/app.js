@@ -6,6 +6,9 @@ const error = document.querySelector("#error");
 const button = form.querySelector("button");
 const queue = document.querySelector("#queue");
 const refreshQueueButton = document.querySelector("#refresh-queue");
+const studyForm = document.querySelector("#study-form");
+const studyPlan = document.querySelector("#study-plan");
+const studyError = document.querySelector("#study-error");
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -112,3 +115,55 @@ function escapeHtml(value) {
 }
 
 loadQueue();
+loadStudyPlan();
+
+studyForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  studyError.textContent = "";
+  const button = studyForm.querySelector("button");
+  button.disabled = true;
+  button.textContent = "Building plan…";
+
+  try {
+    const response = await fetch("http://localhost:8000/study/upload", {
+      method: "POST",
+      body: new FormData(studyForm),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "Could not build the study plan.");
+    renderStudyPlan(data.topics);
+  } catch (requestError) {
+    studyError.textContent = requestError.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = "Build study plan";
+  }
+});
+
+async function loadStudyPlan() {
+  try {
+    const response = await fetch("http://localhost:8000/study/plan");
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "Could not load the study plan.");
+    renderStudyPlan(data.topics);
+  } catch (requestError) {
+    studyPlan.innerHTML = `<p class="error">${escapeHtml(requestError.message)}</p>`;
+  }
+}
+
+function renderStudyPlan(topics) {
+  if (!topics.length) {
+    studyPlan.innerHTML = "<p class=\"muted\">No study plan yet. Upload both files to create one.</p>";
+    return;
+  }
+  studyPlan.innerHTML = topics.map((item) => `
+    <details class="study-topic">
+      <summary>
+        <span>${escapeHtml(item.topic)}</span>
+        <span class="weight">${item.weight}/10</span>
+      </summary>
+      <div class="weight-track"><span style="width: ${item.weight * 10}%"></span></div>
+      <ul>${item.subtopics.map((subtopic) => `<li>${escapeHtml(subtopic)}</li>`).join("")}</ul>
+    </details>
+  `).join("");
+}
