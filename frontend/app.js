@@ -67,6 +67,12 @@ async function loadQueue() {
     const groups = await response.json();
     if (!response.ok) throw new Error(groups.detail || "Could not load the queue.");
 
+    const totalItems = Object.values(groups).reduce((total, items) => total + items.length, 0);
+    if (!totalItems) {
+      queue.innerHTML = "<p class=\"empty-state\">Nothing urgent right now.</p>";
+      return;
+    }
+
     queue.innerHTML = Object.entries(groups).map(([name, items]) => `
       <section class="queue-group">
         <h3>${name} <span>${items.length}</span></h3>
@@ -82,11 +88,12 @@ function queueItem(item) {
   const summary = item.text.length > 150 ? `${item.text.slice(0, 150)}...` : item.text;
   const mandatory = item.mandatory === true ? "Mandatory" : item.mandatory === false ? "Optional" : "Requirement unclear";
   const deadline = item.deadline || "No explicit deadline";
+  const deadlineClass = isDeadlineWithin24Hours(item.deadline) ? " deadline-soon" : "";
   return `
     <article class="queue-item" data-item-id="${item.id}">
       <p class="summary">${escapeHtml(summary)}</p>
       <p class="muted">${escapeHtml(item.reason)}</p>
-      <p class="metadata"><span>${escapeHtml(deadline)}</span><span class="mandatory">${mandatory}</span></p>
+      <p class="metadata"><span class="deadline${deadlineClass}">${escapeHtml(deadline)}</span><span class="mandatory ${item.mandatory === true ? "is-mandatory" : "is-optional"}">${mandatory}</span></p>
       <button class="done-button" type="button" data-item-id="${item.id}">Mark done</button>
     </article>
   `;
@@ -113,6 +120,26 @@ function escapeHtml(value) {
   const template = document.createElement("template");
   template.textContent = value;
   return template.innerHTML;
+}
+
+function isDeadlineWithin24Hours(deadline) {
+  if (!deadline) return false;
+  const isoMatch = deadline.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const slashMatch = deadline.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!isoMatch && !slashMatch) return false;
+
+  const [, first, second, third] = isoMatch || slashMatch;
+  const year = Number(isoMatch ? first : third);
+  const month = Number(isoMatch ? second : first);
+  const day = Number(isoMatch ? third : second);
+  const parsed = new Date(year, month - 1, day);
+  if (
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day
+  ) return false;
+  const millisecondsUntilDeadline = parsed.getTime() - Date.now();
+  return millisecondsUntilDeadline >= 0 && millisecondsUntilDeadline <= 24 * 60 * 60 * 1000;
 }
 
 loadQueue();
@@ -155,7 +182,7 @@ async function loadStudyPlan() {
 
 function renderStudyPlan(topics) {
   if (!topics.length) {
-    studyPlan.innerHTML = "<p class=\"muted\">No study plan yet. Upload both files to create one.</p>";
+    studyPlan.innerHTML = "<p class=\"empty-state\">Upload a question bank to get started.</p>";
     return;
   }
   studyPlan.innerHTML = topics.map((item) => `
@@ -164,7 +191,7 @@ function renderStudyPlan(topics) {
         <span>${escapeHtml(item.topic)}</span>
         <span class="weight">${item.weight}/10</span>
       </summary>
-      <div class="weight-track"><span style="width: ${item.weight * 10}%"></span></div>
+      <div class="weight-track"><span style="width: ${item.weight * 10}%; --weight: ${item.weight}"></span></div>
       <ul>${item.subtopics.map((subtopic) => `<li>${escapeHtml(subtopic)}</li>`).join("")}</ul>
     </details>
   `).join("");
@@ -183,7 +210,7 @@ async function loadPendingActions() {
 
 function renderPendingActions(actions) {
   if (!actions.length) {
-    pendingActions.innerHTML = "<p class=\"muted\">No actions are waiting for review.</p>";
+    pendingActions.innerHTML = "<p class=\"empty-state\">No actions are waiting for review.</p>";
     return;
   }
   pendingActions.innerHTML = actions.map((action) => `
