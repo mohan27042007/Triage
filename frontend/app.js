@@ -10,6 +10,11 @@ const studyForm = document.querySelector("#study-form");
 const studyPlan = document.querySelector("#study-plan");
 const studyError = document.querySelector("#study-error");
 const pendingActions = document.querySelector("#pending-actions");
+const approvalTrigger = document.querySelector("#approval-trigger");
+const pendingCount = document.querySelector("#pending-count");
+const approvalLayer = document.querySelector("#approval-layer");
+const approvalDrawer = document.querySelector("#approval-drawer");
+const approvalClose = document.querySelector("#approval-close");
 const assignmentForm = document.querySelector("#assignment-form");
 const assignmentPrompt = document.querySelector("#assignment-prompt");
 const assignmentError = document.querySelector("#assignment-error");
@@ -20,11 +25,12 @@ const loginForm = document.querySelector("#login-form");
 const loginPassword = document.querySelector("#login-password");
 const loginError = document.querySelector("#login-error");
 const appShell = document.querySelector("#app-shell");
-const railNodes = document.querySelectorAll(".rail-node");
+const railNodes = document.querySelectorAll(".rail-node:not(.approval-trigger)");
 const appSections = document.querySelectorAll(".app-section");
 const panelScroller = document.querySelector(".panel-scroller");
 let wheelNavigationLocked = false;
 let authToken = localStorage.getItem("triage-demo-token");
+let drawerTrigger = null;
 
 function showLoginScreen() {
   authToken = null;
@@ -53,6 +59,61 @@ function loadAppData() {
   loadPendingActions();
   loadAssignmentHistory();
 }
+
+function openApprovalDrawer(trigger = approvalTrigger) {
+  drawerTrigger = trigger;
+  approvalLayer.classList.add("is-open");
+  approvalLayer.setAttribute("aria-hidden", "false");
+  approvalClose.focus();
+}
+
+function closeApprovalDrawer() {
+  approvalLayer.classList.remove("is-open");
+  approvalLayer.setAttribute("aria-hidden", "true");
+  if (drawerTrigger?.isConnected) {
+    drawerTrigger.focus();
+  } else {
+    approvalTrigger.focus();
+  }
+}
+
+function updatePendingIndicator(count) {
+  pendingCount.textContent = String(count);
+  approvalTrigger.setAttribute(
+    "aria-label",
+    `Human Review, ${count} pending action${count === 1 ? "" : "s"}`,
+  );
+  approvalTrigger.classList.toggle("has-pending", count > 0);
+}
+
+approvalTrigger.addEventListener("click", () => openApprovalDrawer());
+approvalClose.addEventListener("click", closeApprovalDrawer);
+approvalLayer.querySelector(".approval-scrim").addEventListener("click", closeApprovalDrawer);
+
+document.addEventListener("keydown", (event) => {
+  if (!approvalLayer.classList.contains("is-open")) return;
+  if (event.key === "Escape") {
+    event.preventDefault();
+    closeApprovalDrawer();
+    return;
+  }
+  if (event.key !== "Tab") return;
+
+  const focusable = approvalDrawer.querySelectorAll(
+    "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])",
+  );
+  const elements = [...focusable];
+  const first = elements[0];
+  const last = elements.at(-1);
+  if (!first || !last) return;
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+});
 
 loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -274,7 +335,8 @@ queue.addEventListener("click", async (event) => {
     const response = await apiFetch(`http://localhost:8000/queue/${doneButton.dataset.itemId}/done`, { method: "POST" });
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || "Could not update this item.");
-    loadPendingActions();
+    await loadPendingActions(data.id);
+    openApprovalDrawer(doneButton);
     loadQueue();
   } catch (requestError) {
     error.textContent = requestError.message;
@@ -395,24 +457,30 @@ function renderStudyPlan(topics) {
   `).join("");
 }
 
-async function loadPendingActions() {
+async function loadPendingActions(highlightedActionId = null) {
   try {
     const response = await apiFetch("http://localhost:8000/pending");
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || "Could not load pending actions.");
-    renderPendingActions(data.actions);
+    renderPendingActions(data.actions, highlightedActionId);
   } catch (requestError) {
     pendingActions.innerHTML = `<p class="error">${escapeHtml(requestError.message)}</p>`;
   }
 }
 
-function renderPendingActions(actions) {
+function renderPendingActions(actions, highlightedActionId = null) {
+  updatePendingIndicator(actions.length);
   if (!actions.length) {
     pendingActions.innerHTML = "<p class=\"empty-state\">No actions are waiting for review.</p>";
     return;
   }
-  pendingActions.innerHTML = actions.map((action) => `
-    <article class="pending-action" data-action-id="${action.id}">
+  const orderedActions = [...actions].sort((first, second) => {
+    if (first.id === highlightedActionId) return -1;
+    if (second.id === highlightedActionId) return 1;
+    return 0;
+  });
+  pendingActions.innerHTML = orderedActions.map((action) => `
+    <article class="pending-action${action.id === highlightedActionId ? " is-highlighted" : ""}" data-action-id="${action.id}">
       <p class="summary">${escapeHtml(action.payload.message)}</p>
       <p class="muted">Triage will not make this change until you approve it.</p>
       <div class="pending-buttons">
@@ -436,7 +504,7 @@ pendingActions.addEventListener("click", async (event) => {
     );
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || "Could not update this action.");
-    loadPendingActions();
+    await loadPendingActions();
     loadQueue();
     loadStudyPlan();
   } catch (requestError) {

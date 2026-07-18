@@ -40,6 +40,9 @@ main { width: 100%; }
 .rail-node[data-section="study"] { --node-color: var(--triage-green); }
 .rail-node[data-section="pending"] { --node-color: var(--triage-amber); }
 .rail-node[data-section="assignment"] { --node-color: var(--triage-amber); }
+.approval-trigger { opacity: .7; }
+.approval-trigger.has-pending { opacity: 1; }
+.rail-count { position: absolute; top: 5px; left: 43px; min-width: 16px; padding: 1px 4px; border-radius: 999px; color: var(--ink); background: var(--triage-amber); font: 700 10px/1.4 "JetBrains Mono", ui-monospace, monospace; }
 .rail-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--node-color); transition: box-shadow 150ms ease, opacity 150ms ease, transform 150ms ease; }
 .rail-node.is-active { opacity: 1; }
 .rail-node.is-active .rail-dot { box-shadow: 0 0 0 4px color-mix(in srgb, var(--node-color) 18%, transparent), 0 0 12px var(--node-color); transform: scale(1.12); }
@@ -150,6 +153,21 @@ dd { margin: 4px 0 0; font: 12px "JetBrains Mono", ui-monospace, monospace; lett
 .pending-action { border-color: rgb(232 163 61 / 25%); }
 .pending-buttons { display: flex; gap: 8px; }
 .pending-buttons button { width: auto; margin-top: 12px; }
+.pending-action.is-highlighted { border-color: var(--triage-amber); box-shadow: 0 0 0 1px rgb(232 163 61 / 28%), 0 8px 20px rgb(0 0 0 / 20%); }
+
+.approval-layer { position: fixed; z-index: 30; inset: 0; visibility: hidden; pointer-events: none; transition: visibility 0s linear 250ms; }
+.approval-layer.is-open { visibility: visible; pointer-events: auto; transition-delay: 0s; }
+.approval-scrim { position: absolute; inset: 0; background: rgb(18 20 26 / 70%); opacity: 0; transition: opacity 250ms ease; }
+.approval-layer.is-open .approval-scrim { opacity: 1; }
+.approval-drawer { position: absolute; top: 0; right: 0; display: flex; flex-direction: column; width: min(100%, 440px); height: 100%; padding: 28px; overflow-y: auto; border-left: 3px solid var(--triage-amber); color: var(--paper); background: var(--surface); box-shadow: -16px 0 40px rgb(0 0 0 / 30%); transform: translateX(100%); transition: transform 250ms ease; }
+.approval-layer.is-open .approval-drawer { transform: translateX(0); }
+.approval-drawer:focus-visible { outline: 2px solid var(--paper); outline-offset: -4px; }
+.approval-drawer-header { display: flex; align-items: start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.approval-drawer-header h2 { margin: 0; }
+.approval-close { width: 36px; height: 36px; margin: 0; padding: 0; border: 1px solid rgb(91 100 112 / 40%); color: var(--paper); background: transparent; font-size: 24px; line-height: 1; }
+.approval-close:hover:not(:disabled) { background: rgb(91 100 112 / 18%); }
+.approval-drawer .pending-actions { display: grid; gap: 12px; }
+.approval-drawer .pending-action { margin: 0; }
 
 .study-section form { display: grid; gap: 8px; }
 .study-section form label:not(:first-child) { margin-top: 6px; }
