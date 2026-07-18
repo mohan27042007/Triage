@@ -10,34 +10,45 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <main>
-      <p class="eyebrow">TRIAGE / LOCAL-FIRST CORE</p>
-      <h1>What needs your attention?</h1>
-      <p class="intro">Paste a college message or upload a UTF-8 <code>.txt</code> file.</p>
+    <nav class="pulse-rail" aria-label="Triage sections">
+      <div class="rail-nodes">
+        <button class="rail-node is-active" type="button" data-section="stream" aria-label="Stream/Ingest" aria-controls="stream-section" aria-pressed="true"><span class="rail-dot"></span><span class="rail-label">Stream/Ingest</span></button>
+        <button class="rail-node" type="button" data-section="queue" aria-label="Action Queue" aria-controls="queue-section" aria-pressed="false"><span class="rail-dot"></span><span class="rail-label">Action Queue</span></button>
+        <button class="rail-node" type="button" data-section="study" aria-label="Study Plan" aria-controls="study-section" aria-pressed="false"><span class="rail-dot"></span><span class="rail-label">Study Plan</span></button>
+        <button class="rail-node" type="button" data-section="pending" aria-label="Human Review" aria-controls="pending-section" aria-pressed="false"><span class="rail-dot"></span><span class="rail-label">Human Review</span></button>
+      </div>
+    </nav>
 
-      <form id="ingest-form">
-        <label for="text">Message text</label>
-        <textarea id="text" name="text" rows="9" placeholder="Paste an email, notice, question-bank item, or announcement..."></textarea>
+    <main class="app-content">
+      <section id="stream-section" class="app-section is-active" aria-labelledby="stream-title">
+        <p class="eyebrow">TRIAGE / LOCAL-FIRST CORE</p>
+        <h1 id="stream-title">What needs your attention?</h1>
+        <p class="intro">Paste a college message or upload a UTF-8 <code>.txt</code> file.</p>
 
-        <p class="divider"><span>or</span></p>
+        <form id="ingest-form">
+          <label for="text">Message text</label>
+          <textarea id="text" name="text" rows="9" placeholder="Paste an email, notice, question-bank item, or announcement..."></textarea>
 
-        <label for="file">Text file</label>
-        <input id="file" name="file" type="file" accept=".txt,text/plain" />
+          <p class="divider"><span>or</span></p>
 
-        <button type="submit">Classify with Triage</button>
-      </form>
+          <label for="file">Text file</label>
+          <input id="file" name="file" type="file" accept=".txt,text/plain" />
 
-      <section id="result" class="result" aria-live="polite" hidden>
-        <p id="category" class="badge"></p>
-        <p id="reason"></p>
-        <dl>
-          <div><dt>Deadline</dt><dd id="deadline">—</dd></div>
-          <div><dt>Mandatory</dt><dd id="mandatory">—</dd></div>
-        </dl>
+          <button type="submit">Classify with Triage</button>
+        </form>
+
+        <section id="result" class="result" aria-live="polite" hidden>
+          <p id="category" class="badge"></p>
+          <p id="reason"></p>
+          <dl>
+            <div><dt>Deadline</dt><dd id="deadline">—</dd></div>
+            <div><dt>Mandatory</dt><dd id="mandatory">—</dd></div>
+          </dl>
+        </section>
+        <p id="error" class="error" role="alert"></p>
       </section>
-      <p id="error" class="error" role="alert"></p>
 
-      <section class="queue-section" aria-labelledby="queue-title">
+      <section id="queue-section" class="app-section queue-section" aria-labelledby="queue-title">
         <div class="queue-heading">
           <div>
             <p class="eyebrow">ACTION QUEUE</p>
@@ -48,13 +59,7 @@
         <div id="queue" class="queue" aria-live="polite"></div>
       </section>
 
-      <section class="pending-section" aria-labelledby="pending-title">
-        <p class="eyebrow">HUMAN REVIEW</p>
-        <h2 id="pending-title">Waiting for your approval</h2>
-        <div id="pending-actions" class="pending-actions" aria-live="polite"></div>
-      </section>
-
-      <section class="study-section" aria-labelledby="study-title">
+      <section id="study-section" class="app-section study-section" aria-labelledby="study-title">
         <p class="eyebrow">STUDY PLAN</p>
         <h2 id="study-title">Rank the topics worth studying</h2>
         <p class="intro">Upload a question bank and its unit notes. Triage returns a topic outline, never full answers.</p>
@@ -67,6 +72,12 @@
         </form>
         <p id="study-error" class="error" role="alert"></p>
         <div id="study-plan" class="study-plan" aria-live="polite"></div>
+      </section>
+
+      <section id="pending-section" class="app-section pending-section" aria-labelledby="pending-title">
+        <p class="eyebrow">HUMAN REVIEW</p>
+        <h2 id="pending-title">Waiting for your approval</h2>
+        <div id="pending-actions" class="pending-actions" aria-live="polite"></div>
       </section>
     </main>
     <script src="app.js"></script>

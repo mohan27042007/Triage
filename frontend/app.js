@@ -10,6 +10,23 @@ const studyForm = document.querySelector("#study-form");
 const studyPlan = document.querySelector("#study-plan");
 const studyError = document.querySelector("#study-error");
 const pendingActions = document.querySelector("#pending-actions");
+const railNodes = document.querySelectorAll(".rail-node");
+const appSections = document.querySelectorAll(".app-section");
+
+railNodes.forEach((railNode) => {
+  railNode.addEventListener("click", () => setActiveSection(railNode.dataset.section));
+});
+
+function setActiveSection(sectionName) {
+  appSections.forEach((section) => {
+    section.classList.toggle("is-active", section.id === `${sectionName}-section`);
+  });
+  railNodes.forEach((railNode) => {
+    const isActive = railNode.dataset.section === sectionName;
+    railNode.classList.toggle("is-active", isActive);
+    railNode.setAttribute("aria-pressed", String(isActive));
+  });
+}
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
