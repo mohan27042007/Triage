@@ -12,6 +12,7 @@ const studyError = document.querySelector("#study-error");
 const pendingActions = document.querySelector("#pending-actions");
 const railNodes = document.querySelectorAll(".rail-node");
 const appSections = document.querySelectorAll(".app-section");
+const panelScroller = document.querySelector(".panel-scroller");
 
 railNodes.forEach((railNode) => {
   railNode.addEventListener("click", () => scrollToSection(railNode.dataset.section));
@@ -20,7 +21,7 @@ railNodes.forEach((railNode) => {
 function scrollToSection(sectionName) {
   const section = document.querySelector(`#${sectionName}-section`);
   if (!section) return;
-  section.scrollIntoView({ behavior: "smooth", block: "start" });
+  panelScroller.scrollTo({ left: section.offsetLeft, behavior: "smooth" });
   setActiveRailNode(sectionName);
 }
 
@@ -43,9 +44,24 @@ const railObserver = new IntersectionObserver((entries) => {
   if (visibleSections.length) {
     setActiveRailNode(visibleSections[0].target.id.replace("-section", ""));
   }
-}, { rootMargin: "-12% 0px -55%", threshold: [0, .15, .5] });
+}, { root: panelScroller, rootMargin: "0px -35% 0px 0px", threshold: [0, .15, .5] });
 
 appSections.forEach((section) => railObserver.observe(section));
+
+document.addEventListener("keydown", (event) => {
+  if (
+    event.key !== "ArrowLeft" &&
+    event.key !== "ArrowRight" ||
+    ["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(document.activeElement.tagName)
+  ) return;
+
+  const activeIndex = [...railNodes].findIndex((railNode) => railNode.classList.contains("is-active"));
+  const nextIndex = activeIndex + (event.key === "ArrowRight" ? 1 : -1);
+  if (nextIndex < 0 || nextIndex >= railNodes.length) return;
+
+  event.preventDefault();
+  scrollToSection(railNodes[nextIndex].dataset.section);
+});
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();

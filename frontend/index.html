@@ -19,14 +19,13 @@
       </div>
     </nav>
 
-    <main class="app-content">
-      <header class="dashboard-header">
-        <p class="eyebrow">LOCAL-FIRST STUDENT DESK</p>
-        <h1>Triage</h1>
-        <p class="tagline">Sort what needs action, study, or a quick human decision.</p>
-      </header>
-
-      <section id="stream-section" class="app-section" aria-labelledby="stream-title">
+    <main class="panel-scroller" tabindex="0" aria-label="Triage dashboard panels">
+      <section id="stream-section" class="app-section glass-panel" tabindex="0" aria-labelledby="stream-title">
+        <header class="dashboard-header">
+          <p class="eyebrow">LOCAL-FIRST STUDENT DESK</p>
+          <h1>Triage</h1>
+          <p class="tagline">Sort what needs action, study, or a quick human decision.</p>
+        </header>
         <p class="eyebrow">STREAM / INGEST</p>
         <h2 id="stream-title">What needs your attention?</h2>
         <p class="intro">Paste a college message or upload a UTF-8 <code>.txt</code> file.</p>
@@ -54,7 +53,7 @@
         <p id="error" class="error" role="alert"></p>
       </section>
 
-      <section id="queue-section" class="app-section queue-section" aria-labelledby="queue-title">
+      <section id="queue-section" class="app-section glass-panel queue-section" tabindex="0" aria-labelledby="queue-title">
         <div class="queue-heading">
           <div>
             <p class="eyebrow">ACTION QUEUE</p>
@@ -65,7 +64,7 @@
         <div id="queue" class="queue" aria-live="polite"></div>
       </section>
 
-      <section id="study-section" class="app-section study-section" aria-labelledby="study-title">
+      <section id="study-section" class="app-section glass-panel study-section" tabindex="0" aria-labelledby="study-title">
         <p class="eyebrow">STUDY PLAN</p>
         <h2 id="study-title">Rank the topics worth studying</h2>
         <p class="intro">Upload a question bank and its unit notes. Triage returns a topic outline, never full answers.</p>
@@ -80,7 +79,7 @@
         <div id="study-plan" class="study-plan" aria-live="polite"></div>
       </section>
 
-      <section id="pending-section" class="app-section pending-section" aria-labelledby="pending-title">
+      <section id="pending-section" class="app-section glass-panel pending-section" tabindex="0" aria-labelledby="pending-title">
         <p class="eyebrow">HUMAN REVIEW</p>
         <h2 id="pending-title">Waiting for your approval</h2>
         <div id="pending-actions" class="pending-actions" aria-live="polite"></div>
