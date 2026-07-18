@@ -13,12 +13,23 @@ const pendingActions = document.querySelector("#pending-actions");
 const railNodes = document.querySelectorAll(".rail-node");
 const appSections = document.querySelectorAll(".app-section");
 const panelScroller = document.querySelector(".panel-scroller");
+let wheelNavigationLocked = false;
 
 panelScroller.addEventListener("wheel", (event) => {
   if (!event.deltaY) return;
-  panelScroller.scrollLeft += event.deltaY;
   event.preventDefault();
-}, { passive: false });
+  if (wheelNavigationLocked) return;
+
+  const activeIndex = [...railNodes].findIndex((railNode) => railNode.classList.contains("is-active"));
+  const nextIndex = activeIndex + (event.deltaY > 0 ? 1 : -1);
+  if (nextIndex < 0 || nextIndex >= railNodes.length) return;
+
+  wheelNavigationLocked = true;
+  scrollToSection(railNodes[nextIndex].dataset.section);
+  window.setTimeout(() => {
+    wheelNavigationLocked = false;
+  }, 350);
+}, { passive: false, capture: true });
 
 railNodes.forEach((railNode) => {
   railNode.addEventListener("click", () => scrollToSection(railNode.dataset.section));

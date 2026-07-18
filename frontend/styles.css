@@ -40,9 +40,10 @@ main { width: 100%; }
 .rail-node:hover .rail-label, .rail-node:focus-visible .rail-label { opacity: 1; transform: translate(0, -50%); }
 .panel-scroller {
   display: flex;
-  gap: 20px;
+  gap: 16px;
   width: 100vw;
   height: 100vh;
+  padding: 16px;
   overflow-x: auto;
   overflow-y: hidden;
   scroll-behavior: smooth;
@@ -56,14 +57,14 @@ main { width: 100%; }
 .app-section {
   flex: 0 0 90vw;
   min-width: 0;
-  min-height: 100vh;
-  max-height: 100vh;
+  min-height: calc(100vh - 32px);
+  max-height: calc(100vh - 32px);
   padding: 40px 40px 40px 112px;
   overflow-y: auto;
   scroll-snap-align: start;
   scroll-snap-stop: always;
   border: 1px solid rgb(246 243 236 / 12%);
-  border-radius: 0;
+  border-radius: 6px;
   background: rgb(27 30 38 / 60%);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
@@ -155,8 +156,8 @@ dd { margin: 4px 0 0; font: 12px "JetBrains Mono", ui-monospace, monospace; lett
 .study-topic ul { margin: 12px 16px 16px; padding-left: 18px; color: var(--triage-slate); font-size: 14px; line-height: 1.5; }
 
 @media (max-width: 560px) {
-  .panel-scroller { gap: 12px; }
-  .app-section { flex-basis: 92vw; padding: 28px 20px 28px 92px; }
+  .panel-scroller { gap: 12px; padding: 12px; }
+  .app-section { flex-basis: 92vw; min-height: calc(100vh - 24px); max-height: calc(100vh - 24px); padding: 28px 20px 28px 92px; }
   .queue-heading { align-items: start; flex-direction: column; }
   dl { gap: 16px; }
 }
