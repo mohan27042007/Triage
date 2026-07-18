@@ -10,6 +10,11 @@ const studyForm = document.querySelector("#study-form");
 const studyPlan = document.querySelector("#study-plan");
 const studyError = document.querySelector("#study-error");
 const pendingActions = document.querySelector("#pending-actions");
+const assignmentForm = document.querySelector("#assignment-form");
+const assignmentPrompt = document.querySelector("#assignment-prompt");
+const assignmentError = document.querySelector("#assignment-error");
+const assignmentResult = document.querySelector("#assignment-result");
+const assignmentHistory = document.querySelector("#assignment-history");
 const railNodes = document.querySelectorAll(".rail-node");
 const appSections = document.querySelectorAll(".app-section");
 const panelScroller = document.querySelector(".panel-scroller");
@@ -275,6 +280,7 @@ function createValidatedDate(year, month, day, hour = 0, minute = 0) {
 loadQueue();
 loadStudyPlan();
 loadPendingActions();
+loadAssignmentHistory();
 
 studyForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -376,3 +382,88 @@ pendingActions.addEventListener("click", async (event) => {
     actionButton.disabled = false;
   }
 });
+
+assignmentForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  assignmentError.textContent = "";
+  const prompt = assignmentPrompt.value.trim();
+  if (!prompt) {
+    assignmentError.textContent = "Paste an assignment prompt first.";
+    return;
+  }
+
+  const submitButton = assignmentForm.querySelector("button");
+  submitButton.disabled = true;
+  submitButton.textContent = "Building scaffold…";
+  try {
+    const response = await fetch("http://localhost:8000/assignment/help", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt }),
+    });
+    const scaffold = await response.json();
+    if (!response.ok) throw new Error(scaffold.detail || "Could not build the assignment scaffold.");
+    renderAssignmentScaffold(scaffold);
+    loadAssignmentHistory();
+  } catch (requestError) {
+    assignmentError.textContent = requestError.message;
+  } finally {
+    submitButton.disabled = false;
+    submitButton.textContent = "Build scaffold";
+  }
+});
+
+async function loadAssignmentHistory() {
+  try {
+    const response = await fetch("http://localhost:8000/assignment/history");
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "Could not load assignment history.");
+    renderAssignmentHistory(data.assignments);
+  } catch (requestError) {
+    assignmentHistory.innerHTML = `<p class="error">${escapeHtml(requestError.message)}</p>`;
+  }
+}
+
+function renderAssignmentScaffold(scaffold) {
+  assignmentResult.innerHTML = assignmentScaffoldMarkup(scaffold, true);
+}
+
+function renderAssignmentHistory(assignments) {
+  if (!assignments.length) {
+    assignmentHistory.innerHTML = "<p class=\"empty-state\">No scaffolds saved yet.</p>";
+    return;
+  }
+  assignmentHistory.innerHTML = assignments.map((assignment) => `
+    <details class="assignment-history-item">
+      <summary>${escapeHtml(formatAssignmentDate(assignment.created_at))}</summary>
+      <p class="assignment-prompt-preview">${escapeHtml(assignment.prompt)}</p>
+      ${assignmentScaffoldMarkup(assignment, false)}
+    </details>
+  `).join("");
+}
+
+function assignmentScaffoldMarkup(scaffold, open) {
+  return `
+    <details class="assignment-scaffold-section" ${open ? "open" : ""}>
+      <summary>Requirements</summary>
+      <ul>${scaffold.requirements.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+    </details>
+    <details class="assignment-scaffold-section" ${open ? "open" : ""}>
+      <summary>Concepts</summary>
+      <ul>${scaffold.concepts.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+    </details>
+    <details class="assignment-scaffold-section" ${open ? "open" : ""}>
+      <summary>Approach</summary>
+      <ol>${scaffold.approach.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ol>
+    </details>
+    <details class="assignment-scaffold-section" ${open ? "open" : ""}>
+      <summary>Test Cases</summary>
+      <ul class="assignment-test-cases">${scaffold.test_cases.map((testCase) => `<li><span>Input</span><code>${escapeHtml(testCase.input)}</code><span>Expected output</span><code>${escapeHtml(testCase.expected_output)}</code></li>`).join("")}</ul>
+    </details>
+  `;
+}
+
+function formatAssignmentDate(createdAt) {
+  const parsed = new Date(createdAt);
+  return Number.isNaN(parsed.getTime()) ? "Saved scaffold" : `Saved ${parsed.toLocaleString()}`;
+}

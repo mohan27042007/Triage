@@ -43,6 +43,8 @@ The API will run at `http://localhost:8000`; visit `http://localhost:8000/docs` 
 - `POST /pending/{id}/reject` — rejects a pending action without applying it.
 - `POST /study/upload` — accepts UTF-8 `.txt` files named `question_bank` and `unit_notes`, then builds and persists a ranked study plan.
 - `GET /study/plan` — returns the latest persisted study topic list, ordered by weight.
+- `POST /assignment/help` — accepts JSON (`{"prompt":"..."}`), returns a planning-only assignment scaffold, and stores it locally.
+- `GET /assignment/history` — returns saved assignment scaffolds, newest first.
 - `GET /health` — confirms the API is running.
 
 ### Frontend
@@ -70,6 +72,10 @@ Open `http://localhost:3000` in your browser. Paste text or upload a UTF-8 `.txt
 2. In the Study Plan section, upload both files and select **Build study plan**.
 3. Confirm the result shows ranked topics, a 1–10 weight, and an expandable outline for each topic.
 4. Restart the API and refresh the page; the latest study plan should still appear.
+
+### Assignment Scaffolding
+
+Paste an assignment prompt into the **Assignment Scaffold** panel and select **Build scaffold**. Triage returns requirements, concepts, a planning/pseudocode-level approach, and test cases—never a complete solution or full written answer. Previous scaffolds remain available in the panel after a restart.
 
 ### Manual smoke-test messages
 

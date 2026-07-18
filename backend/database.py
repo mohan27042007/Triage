@@ -57,6 +57,19 @@ def initialize_database() -> None:
             )
             """
         )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS assignment_help (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                prompt TEXT NOT NULL,
+                requirements TEXT NOT NULL,
+                concepts TEXT NOT NULL,
+                approach TEXT NOT NULL,
+                test_cases TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
 
 
 def create_item(text: str, classification: dict[str, Any]) -> dict[str, Any] | None:
@@ -220,6 +233,39 @@ def get_study_plan() -> list[dict[str, Any]]:
     ]
 
 
+def create_assignment_help(prompt: str, scaffold: dict[str, Any]) -> dict[str, Any] | None:
+    """Persist one assignment scaffold and return its stored record."""
+    created_at = datetime.now().astimezone().isoformat()
+    with _connection() as connection:
+        cursor = connection.execute(
+            """
+            INSERT INTO assignment_help (prompt, requirements, concepts, approach, test_cases, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                prompt.strip(),
+                json.dumps(scaffold["requirements"]),
+                json.dumps(scaffold["concepts"]),
+                json.dumps(scaffold["approach"]),
+                json.dumps(scaffold["test_cases"]),
+                created_at,
+            ),
+        )
+        row = connection.execute(
+            "SELECT * FROM assignment_help WHERE id = ?", (cursor.lastrowid,)
+        ).fetchone()
+    return _row_to_assignment_help(row) if row else None
+
+
+def get_assignment_history() -> list[dict[str, Any]]:
+    """Return saved assignment scaffolds with the newest first."""
+    with _connection() as connection:
+        rows = connection.execute(
+            "SELECT * FROM assignment_help ORDER BY created_at DESC, id DESC"
+        ).fetchall()
+    return [_row_to_assignment_help(row) for row in rows]
+
+
 def _row_to_item(row: sqlite3.Row) -> dict[str, Any]:
     item = dict(row)
     item["mandatory"] = None if item["mandatory"] is None else bool(item["mandatory"])
@@ -230,3 +276,12 @@ def _row_to_pending_action(row: sqlite3.Row) -> dict[str, Any]:
     action = dict(row)
     action["payload"] = json.loads(action["payload"])
     return action
+
+
+def _row_to_assignment_help(row: sqlite3.Row) -> dict[str, Any]:
+    scaffold = dict(row)
+    scaffold["requirements"] = json.loads(scaffold["requirements"])
+    scaffold["concepts"] = json.loads(scaffold["concepts"])
+    scaffold["approach"] = json.loads(scaffold["approach"])
+    scaffold["test_cases"] = json.loads(scaffold["test_cases"])
+    return scaffold

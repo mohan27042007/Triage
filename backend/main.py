@@ -7,12 +7,15 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
+from assignment_helper import scaffold_assignment
 from classifier import build_study_plan, classify
 from database import (
+    create_assignment_help,
     create_item,
     create_pending_action,
     approve_pending_action,
     get_item,
+    get_assignment_history,
     get_open_obligations,
     get_pending_actions,
     get_study_plan,
@@ -155,6 +158,36 @@ async def upload_study_materials(request: Request) -> dict[str, list[dict]]:
 def study_plan() -> dict[str, list[dict]]:
     """Return the persisted, highest-priority-first study topics."""
     return {"topics": get_study_plan()}
+
+
+@app.post("/assignment/help")
+async def assignment_help(request: Request) -> dict:
+    """Create and store a planning-only scaffold for one assignment prompt."""
+    if not request.headers.get("content-type", "").startswith("application/json"):
+        raise HTTPException(status_code=400, detail='Use application/json with {"prompt": "..."}.')
+
+    try:
+        payload = await request.json()
+        if not isinstance(payload, dict) or not isinstance(payload.get("prompt"), str):
+            raise ValueError('JSON requests must use {"prompt": "..."}.')
+        prompt = payload["prompt"]
+        if len(prompt) > 5000:
+            raise ValueError("Assignment prompt is too long.")
+        scaffold = scaffold_assignment(prompt)
+        saved_scaffold = create_assignment_help(prompt, scaffold)
+        if not saved_scaffold:
+            raise RuntimeError("Could not save the assignment scaffold.")
+        return saved_scaffold
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/assignment/history")
+def assignment_history() -> dict[str, list[dict]]:
+    """Return saved assignment scaffolds, newest first."""
+    return {"assignments": get_assignment_history()}
 
 
 def _queue_group(item: dict) -> str:

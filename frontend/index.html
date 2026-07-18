@@ -16,6 +16,7 @@
         <button class="rail-node" type="button" data-section="queue" aria-label="Action Queue" aria-controls="queue-section"><span class="rail-dot"></span><span class="rail-label">Action Queue</span></button>
         <button class="rail-node" type="button" data-section="study" aria-label="Study Plan" aria-controls="study-section"><span class="rail-dot"></span><span class="rail-label">Study Plan</span></button>
         <button class="rail-node" type="button" data-section="pending" aria-label="Human Review" aria-controls="pending-section"><span class="rail-dot"></span><span class="rail-label">Human Review</span></button>
+        <button class="rail-node" type="button" data-section="assignment" aria-label="Assignment Scaffold" aria-controls="assignment-section"><span class="rail-dot"></span><span class="rail-label">Assignment Scaffold</span></button>
       </div>
     </nav>
 
@@ -83,6 +84,24 @@
         <p class="eyebrow">HUMAN REVIEW</p>
         <h2 id="pending-title">Waiting for your approval</h2>
         <div id="pending-actions" class="pending-actions" aria-live="polite"></div>
+      </section>
+
+      <section id="assignment-section" class="app-section glass-panel assignment-section" tabindex="0" aria-labelledby="assignment-title">
+        <p class="eyebrow">ASSIGNMENT SCAFFOLD</p>
+        <h2 id="assignment-title">Plan the work, not the answer</h2>
+        <p class="intro">Paste an assignment prompt for requirements, concepts, an approach outline, and self-checking test cases.</p>
+        <form id="assignment-form">
+          <label for="assignment-prompt">Paste your assignment prompt</label>
+          <textarea id="assignment-prompt" name="prompt" rows="9" placeholder="Paste the assignment brief, question, or problem statement..."></textarea>
+          <button type="submit">Build scaffold</button>
+        </form>
+        <p id="assignment-error" class="error" role="alert"></p>
+        <div id="assignment-result" class="assignment-scaffold" aria-live="polite"></div>
+        <div class="assignment-history-section">
+          <p class="eyebrow">SAVED SCAFFOLDS</p>
+          <h3>Reference history</h3>
+          <div id="assignment-history" class="assignment-history" aria-live="polite"></div>
+        </div>
       </section>
     </main>
     <script src="app.js"></script>
