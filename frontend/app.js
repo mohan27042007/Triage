@@ -14,19 +14,38 @@ const railNodes = document.querySelectorAll(".rail-node");
 const appSections = document.querySelectorAll(".app-section");
 
 railNodes.forEach((railNode) => {
-  railNode.addEventListener("click", () => setActiveSection(railNode.dataset.section));
+  railNode.addEventListener("click", () => scrollToSection(railNode.dataset.section));
 });
 
-function setActiveSection(sectionName) {
-  appSections.forEach((section) => {
-    section.classList.toggle("is-active", section.id === `${sectionName}-section`);
-  });
+function scrollToSection(sectionName) {
+  const section = document.querySelector(`#${sectionName}-section`);
+  if (!section) return;
+  section.scrollIntoView({ behavior: "smooth", block: "start" });
+  setActiveRailNode(sectionName);
+}
+
+function setActiveRailNode(sectionName) {
   railNodes.forEach((railNode) => {
     const isActive = railNode.dataset.section === sectionName;
     railNode.classList.toggle("is-active", isActive);
-    railNode.setAttribute("aria-pressed", String(isActive));
+    if (isActive) {
+      railNode.setAttribute("aria-current", "location");
+    } else {
+      railNode.removeAttribute("aria-current");
+    }
   });
 }
+
+const railObserver = new IntersectionObserver((entries) => {
+  const visibleSections = entries
+    .filter((entry) => entry.isIntersecting)
+    .sort((first, second) => second.intersectionRatio - first.intersectionRatio);
+  if (visibleSections.length) {
+    setActiveRailNode(visibleSections[0].target.id.replace("-section", ""));
+  }
+}, { rootMargin: "-12% 0px -55%", threshold: [0, .15, .5] });
+
+appSections.forEach((section) => railObserver.observe(section));
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();

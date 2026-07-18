@@ -12,17 +12,23 @@
   <body>
     <nav class="pulse-rail" aria-label="Triage sections">
       <div class="rail-nodes">
-        <button class="rail-node is-active" type="button" data-section="stream" aria-label="Stream/Ingest" aria-controls="stream-section" aria-pressed="true"><span class="rail-dot"></span><span class="rail-label">Stream/Ingest</span></button>
-        <button class="rail-node" type="button" data-section="queue" aria-label="Action Queue" aria-controls="queue-section" aria-pressed="false"><span class="rail-dot"></span><span class="rail-label">Action Queue</span></button>
-        <button class="rail-node" type="button" data-section="study" aria-label="Study Plan" aria-controls="study-section" aria-pressed="false"><span class="rail-dot"></span><span class="rail-label">Study Plan</span></button>
-        <button class="rail-node" type="button" data-section="pending" aria-label="Human Review" aria-controls="pending-section" aria-pressed="false"><span class="rail-dot"></span><span class="rail-label">Human Review</span></button>
+        <button class="rail-node is-active" type="button" data-section="stream" aria-label="Stream/Ingest" aria-controls="stream-section" aria-current="location"><span class="rail-dot"></span><span class="rail-label">Stream/Ingest</span></button>
+        <button class="rail-node" type="button" data-section="queue" aria-label="Action Queue" aria-controls="queue-section"><span class="rail-dot"></span><span class="rail-label">Action Queue</span></button>
+        <button class="rail-node" type="button" data-section="study" aria-label="Study Plan" aria-controls="study-section"><span class="rail-dot"></span><span class="rail-label">Study Plan</span></button>
+        <button class="rail-node" type="button" data-section="pending" aria-label="Human Review" aria-controls="pending-section"><span class="rail-dot"></span><span class="rail-label">Human Review</span></button>
       </div>
     </nav>
 
     <main class="app-content">
-      <section id="stream-section" class="app-section is-active" aria-labelledby="stream-title">
-        <p class="eyebrow">TRIAGE / LOCAL-FIRST CORE</p>
-        <h1 id="stream-title">What needs your attention?</h1>
+      <header class="dashboard-header">
+        <p class="eyebrow">LOCAL-FIRST STUDENT DESK</p>
+        <h1>Triage</h1>
+        <p class="tagline">Sort what needs action, study, or a quick human decision.</p>
+      </header>
+
+      <section id="stream-section" class="app-section" aria-labelledby="stream-title">
+        <p class="eyebrow">STREAM / INGEST</p>
+        <h2 id="stream-title">What needs your attention?</h2>
         <p class="intro">Paste a college message or upload a UTF-8 <code>.txt</code> file.</p>
 
         <form id="ingest-form">
