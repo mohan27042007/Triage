@@ -14,7 +14,6 @@ const approvalTrigger = document.querySelector("#approval-trigger");
 const pendingCount = document.querySelector("#pending-count");
 const approvalLayer = document.querySelector("#approval-layer");
 const approvalDrawer = document.querySelector("#approval-drawer");
-const approvalClose = document.querySelector("#approval-close");
 const assignmentForm = document.querySelector("#assignment-form");
 const assignmentPrompt = document.querySelector("#assignment-prompt");
 const assignmentError = document.querySelector("#assignment-error");
@@ -25,7 +24,7 @@ const loginForm = document.querySelector("#login-form");
 const loginPassword = document.querySelector("#login-password");
 const loginError = document.querySelector("#login-error");
 const appShell = document.querySelector("#app-shell");
-const railNodes = document.querySelectorAll(".rail-node:not(.approval-trigger)");
+const railNodes = document.querySelectorAll(".rail-node");
 const appSections = document.querySelectorAll(".app-section");
 const panelScroller = document.querySelector(".panel-scroller");
 let wheelNavigationLocked = false;
@@ -64,12 +63,22 @@ function openApprovalDrawer(trigger = approvalTrigger) {
   drawerTrigger = trigger;
   approvalLayer.classList.add("is-open");
   approvalLayer.setAttribute("aria-hidden", "false");
-  approvalClose.focus();
+  approvalTrigger.classList.add("is-open");
+  approvalTrigger.setAttribute("aria-expanded", "true");
+  approvalTrigger.setAttribute("aria-label", "Close Human Review drawer");
+  const firstAction = approvalDrawer.querySelector("button:not([disabled])");
+  (firstAction || approvalDrawer).focus();
 }
 
 function closeApprovalDrawer() {
   approvalLayer.classList.remove("is-open");
   approvalLayer.setAttribute("aria-hidden", "true");
+  approvalTrigger.classList.remove("is-open");
+  approvalTrigger.setAttribute("aria-expanded", "false");
+  approvalTrigger.setAttribute(
+    "aria-label",
+    `Human Review, ${pendingCount.textContent} pending action${pendingCount.textContent === "1" ? "" : "s"}`,
+  );
   if (drawerTrigger?.isConnected) {
     drawerTrigger.focus();
   } else {
@@ -79,15 +88,22 @@ function closeApprovalDrawer() {
 
 function updatePendingIndicator(count) {
   pendingCount.textContent = String(count);
-  approvalTrigger.setAttribute(
-    "aria-label",
-    `Human Review, ${count} pending action${count === 1 ? "" : "s"}`,
-  );
+  if (!approvalLayer.classList.contains("is-open")) {
+    approvalTrigger.setAttribute(
+      "aria-label",
+      `Human Review, ${count} pending action${count === 1 ? "" : "s"}`,
+    );
+  }
   approvalTrigger.classList.toggle("has-pending", count > 0);
 }
 
-approvalTrigger.addEventListener("click", () => openApprovalDrawer());
-approvalClose.addEventListener("click", closeApprovalDrawer);
+approvalTrigger.addEventListener("click", () => {
+  if (approvalLayer.classList.contains("is-open")) {
+    closeApprovalDrawer();
+  } else {
+    openApprovalDrawer();
+  }
+});
 approvalLayer.querySelector(".approval-scrim").addEventListener("click", closeApprovalDrawer);
 
 document.addEventListener("keydown", (event) => {

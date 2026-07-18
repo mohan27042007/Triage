@@ -29,9 +29,15 @@
         <button class="rail-node" type="button" data-section="queue" aria-label="Action Queue" aria-controls="queue-section"><span class="rail-dot"></span><span class="rail-label">Action Queue</span></button>
         <button class="rail-node" type="button" data-section="study" aria-label="Study Plan" aria-controls="study-section"><span class="rail-dot"></span><span class="rail-label">Study Plan</span></button>
         <button class="rail-node" type="button" data-section="assignment" aria-label="Assignment Scaffold" aria-controls="assignment-section"><span class="rail-dot"></span><span class="rail-label">Assignment Scaffold</span></button>
-        <button id="approval-trigger" class="rail-node approval-trigger" type="button" data-section="pending" aria-label="Human Review, 0 pending actions" aria-controls="approval-drawer" aria-haspopup="dialog"><span class="rail-dot"></span><span id="pending-count" class="rail-count">0</span><span class="rail-label">Human Review</span></button>
       </div>
       </nav>
+
+      <button id="approval-trigger" class="approval-ribbon" type="button" aria-label="Human Review, 0 pending actions" aria-controls="approval-drawer" aria-haspopup="dialog" aria-expanded="false">
+        <span class="approval-ribbon-label">Human Review</span>
+        <span id="pending-count" class="approval-ribbon-count">0</span>
+        <span class="approval-ribbon-arrow" aria-hidden="true">→</span>
+        <span class="approval-ribbon-close" aria-hidden="true">×</span>
+      </button>
 
       <main class="panel-scroller" tabindex="0" aria-label="Triage dashboard panels">
       <section id="stream-section" class="app-section glass-panel" tabindex="0" aria-labelledby="stream-title">
@@ -120,7 +126,6 @@
               <p class="eyebrow">HUMAN REVIEW</p>
               <h2 id="approval-title">Needs Your Approval</h2>
             </div>
-            <button id="approval-close" class="approval-close" type="button" aria-label="Close approval drawer">×</button>
           </div>
           <div id="pending-actions" class="pending-actions" aria-live="polite"></div>
         </aside>
