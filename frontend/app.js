@@ -15,8 +15,32 @@ const appSections = document.querySelectorAll(".app-section");
 const panelScroller = document.querySelector(".panel-scroller");
 let wheelNavigationLocked = false;
 
+function getScrollableParent(target, stopElement) {
+  let el = target;
+  while (el && el !== stopElement) {
+    if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") {
+      return el;
+    }
+    const style = window.getComputedStyle(el);
+    const overflowY = style.overflowY || style.overflow || "";
+    const isScrollable = (overflowY === "auto" || overflowY === "scroll") && el.scrollHeight > el.clientHeight;
+    if (isScrollable) {
+      return el;
+    }
+    el = el.parentElement;
+  }
+  return null;
+}
+
 panelScroller.addEventListener("wheel", (event) => {
   if (!event.deltaY) return;
+
+  const scrollableParent = getScrollableParent(event.target, panelScroller);
+  if (scrollableParent) {
+    // Let the element scroll vertically inside the panel
+    return;
+  }
+
   event.preventDefault();
   if (wheelNavigationLocked) return;
 
@@ -54,16 +78,24 @@ function setActiveRailNode(sectionName) {
   });
 }
 
-const railObserver = new IntersectionObserver((entries) => {
-  const visibleSections = entries
-    .filter((entry) => entry.isIntersecting)
-    .sort((first, second) => second.intersectionRatio - first.intersectionRatio);
-  if (visibleSections.length) {
-    setActiveRailNode(visibleSections[0].target.id.replace("-section", ""));
-  }
-}, { root: panelScroller, rootMargin: "0px -35% 0px 0px", threshold: [0, .15, .5] });
+panelScroller.addEventListener("scroll", () => {
+  const scrollLeft = panelScroller.scrollLeft;
+  let closestSection = null;
+  let minDistance = Infinity;
 
-appSections.forEach((section) => railObserver.observe(section));
+  appSections.forEach((section) => {
+    const distance = Math.abs(section.offsetLeft - scrollLeft);
+    if (distance < minDistance) {
+      minDistance = distance;
+      closestSection = section;
+    }
+  });
+
+  if (closestSection) {
+    const sectionName = closestSection.id.replace("-section", "");
+    setActiveRailNode(sectionName);
+  }
+});
 
 document.addEventListener("keydown", (event) => {
   if (

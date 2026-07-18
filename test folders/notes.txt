@@ -1,0 +1,19 @@
+Unit 3: Introduction to Neural Networks and Model Evaluation
+
+Neural networks consist of layers of interconnected nodes (neurons), each
+applying a weighted sum followed by an activation function. Training uses
+backpropagation to compute gradients of the loss with respect to each
+weight, then gradient descent to update weights and minimize error.
+
+A key challenge in deep networks is the vanishing gradient problem, where
+gradients become very small in early layers, slowing or stalling learning.
+
+Model evaluation relies on splitting data into training, validation, and
+test sets. Classification performance is commonly measured using a
+confusion matrix, from which precision, recall, and accuracy are derived.
+Overfitting occurs when a model performs well on training data but poorly
+on unseen data; regularization and validation monitoring help prevent it.
+
+Supervised learning uses labeled data (e.g. classifying emails as spam or
+not spam), while unsupervised learning finds structure in unlabeled data
+(e.g. clustering customers by purchase behavior).
