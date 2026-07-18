@@ -129,7 +129,7 @@ dt { color: var(--triage-slate); font-size: 12px; }
 dd { margin: 4px 0 0; font: 12px "JetBrains Mono", ui-monospace, monospace; letter-spacing: .02em; }
 .error { min-height: 18px; margin: 10px 0 0; color: var(--triage-red); font-size: 14px; }
 
-.queue-section, .pending-section, .study-section { margin-top: 0; }
+.queue-section, .study-section { margin-top: 0; }
 .queue-heading { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
 .queue-group + .queue-group { margin-top: 16px; }
 .queue-group h3 { margin-bottom: 8px; }
