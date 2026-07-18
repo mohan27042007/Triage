@@ -15,10 +15,70 @@ const assignmentPrompt = document.querySelector("#assignment-prompt");
 const assignmentError = document.querySelector("#assignment-error");
 const assignmentResult = document.querySelector("#assignment-result");
 const assignmentHistory = document.querySelector("#assignment-history");
+const loginScreen = document.querySelector("#login-screen");
+const loginForm = document.querySelector("#login-form");
+const loginPassword = document.querySelector("#login-password");
+const loginError = document.querySelector("#login-error");
+const appShell = document.querySelector("#app-shell");
 const railNodes = document.querySelectorAll(".rail-node");
 const appSections = document.querySelectorAll(".app-section");
 const panelScroller = document.querySelector(".panel-scroller");
 let wheelNavigationLocked = false;
+let authToken = localStorage.getItem("triage-demo-token");
+
+function showLoginScreen() {
+  authToken = null;
+  localStorage.removeItem("triage-demo-token");
+  appShell.hidden = true;
+  loginScreen.hidden = false;
+  loginPassword.value = "";
+}
+
+function showApp() {
+  loginScreen.hidden = true;
+  appShell.hidden = false;
+}
+
+async function apiFetch(url, options = {}) {
+  const headers = new Headers(options.headers || {});
+  if (authToken) headers.set("Authorization", `Bearer ${authToken}`);
+  const response = await fetch(url, { ...options, headers });
+  if (response.status === 401) showLoginScreen();
+  return response;
+}
+
+function loadAppData() {
+  loadQueue();
+  loadStudyPlan();
+  loadPendingActions();
+  loadAssignmentHistory();
+}
+
+loginForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  loginError.textContent = "";
+  const submitButton = loginForm.querySelector("button");
+  submitButton.disabled = true;
+  submitButton.textContent = "Opening…";
+  try {
+    const response = await fetch("http://localhost:8000/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: loginPassword.value }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "Could not sign in.");
+    authToken = data.token;
+    localStorage.setItem("triage-demo-token", authToken);
+    showApp();
+    loadAppData();
+  } catch (requestError) {
+    loginError.textContent = requestError.message;
+  } finally {
+    submitButton.disabled = false;
+    submitButton.textContent = "Open Triage";
+  }
+});
 
 function getScrollableParent(target, stopElement) {
   let el = target;
@@ -135,7 +195,7 @@ form.addEventListener("submit", async (event) => {
   try {
     let response;
     if (text) {
-      response = await fetch("http://localhost:8000/ingest", {
+      response = await apiFetch("http://localhost:8000/ingest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
@@ -143,7 +203,7 @@ form.addEventListener("submit", async (event) => {
     } else {
       const formData = new FormData();
       formData.append("file", file);
-      response = await fetch("http://localhost:8000/ingest", { method: "POST", body: formData });
+      response = await apiFetch("http://localhost:8000/ingest", { method: "POST", body: formData });
     }
 
     const data = await response.json();
@@ -169,7 +229,7 @@ refreshQueueButton.addEventListener("click", loadQueue);
 async function loadQueue() {
   queue.innerHTML = "<p class=\"muted\">Loading queue…</p>";
   try {
-    const response = await fetch("http://localhost:8000/queue");
+    const response = await apiFetch("http://localhost:8000/queue");
     const groups = await response.json();
     if (!response.ok) throw new Error(groups.detail || "Could not load the queue.");
 
@@ -211,7 +271,7 @@ queue.addEventListener("click", async (event) => {
 
   doneButton.disabled = true;
   try {
-    const response = await fetch(`http://localhost:8000/queue/${doneButton.dataset.itemId}/done`, { method: "POST" });
+    const response = await apiFetch(`http://localhost:8000/queue/${doneButton.dataset.itemId}/done`, { method: "POST" });
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || "Could not update this item.");
     loadPendingActions();
@@ -277,10 +337,12 @@ function createValidatedDate(year, month, day, hour = 0, minute = 0) {
   ) ? parsed : null;
 }
 
-loadQueue();
-loadStudyPlan();
-loadPendingActions();
-loadAssignmentHistory();
+if (authToken) {
+  showApp();
+  loadAppData();
+} else {
+  showLoginScreen();
+}
 
 studyForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -290,7 +352,7 @@ studyForm.addEventListener("submit", async (event) => {
   button.textContent = "Building plan…";
 
   try {
-    const response = await fetch("http://localhost:8000/study/upload", {
+    const response = await apiFetch("http://localhost:8000/study/upload", {
       method: "POST",
       body: new FormData(studyForm),
     });
@@ -307,7 +369,7 @@ studyForm.addEventListener("submit", async (event) => {
 
 async function loadStudyPlan() {
   try {
-    const response = await fetch("http://localhost:8000/study/plan");
+    const response = await apiFetch("http://localhost:8000/study/plan");
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || "Could not load the study plan.");
     renderStudyPlan(data.topics);
@@ -335,7 +397,7 @@ function renderStudyPlan(topics) {
 
 async function loadPendingActions() {
   try {
-    const response = await fetch("http://localhost:8000/pending");
+    const response = await apiFetch("http://localhost:8000/pending");
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || "Could not load pending actions.");
     renderPendingActions(data.actions);
@@ -368,7 +430,7 @@ pendingActions.addEventListener("click", async (event) => {
   const decision = actionButton.classList.contains("approve-button") ? "approve" : "reject";
   actionButton.disabled = true;
   try {
-    const response = await fetch(
+    const response = await apiFetch(
       `http://localhost:8000/pending/${actionButton.dataset.actionId}/${decision}`,
       { method: "POST" },
     );
@@ -396,7 +458,7 @@ assignmentForm.addEventListener("submit", async (event) => {
   submitButton.disabled = true;
   submitButton.textContent = "Building scaffold…";
   try {
-    const response = await fetch("http://localhost:8000/assignment/help", {
+    const response = await apiFetch("http://localhost:8000/assignment/help", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt }),
@@ -415,7 +477,7 @@ assignmentForm.addEventListener("submit", async (event) => {
 
 async function loadAssignmentHistory() {
   try {
-    const response = await fetch("http://localhost:8000/assignment/history");
+    const response = await apiFetch("http://localhost:8000/assignment/history");
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || "Could not load assignment history.");
     renderAssignmentHistory(data.assignments);

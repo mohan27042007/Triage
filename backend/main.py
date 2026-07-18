@@ -1,11 +1,15 @@
 """FastAPI server for the local-first Triage classification and Action Queue."""
 
+import os
 import re
+import secrets
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from dotenv import load_dotenv
 
 from assignment_helper import scaffold_assignment
 from classifier import build_study_plan, classify
@@ -24,7 +28,27 @@ from database import (
     replace_study_plan,
 )
 
+load_dotenv()
+
 app = FastAPI(title="Triage API", version="0.1.0")
+DEMO_PASSWORD = os.getenv("DEMO_PASSWORD", "")
+VALID_SESSION_TOKENS: set[str] = set()
+
+initialize_database()
+
+
+@app.middleware("http")
+async def require_demo_auth(request: Request, call_next):
+    """Require an in-memory demo token for all non-public API routes."""
+    if request.method == "OPTIONS" or request.url.path in {"/health", "/auth/login"}:
+        return await call_next(request)
+
+    authorization = request.headers.get("authorization", "")
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or token not in VALID_SESSION_TOKENS:
+        return JSONResponse(status_code=401, content={"detail": "Authentication required."})
+    return await call_next(request)
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -34,12 +58,32 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-initialize_database()
-
 
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.post("/auth/login")
+async def login(request: Request) -> dict[str, str]:
+    """Issue an in-memory token after validating the shared demo password."""
+    if not request.headers.get("content-type", "").startswith("application/json"):
+        raise HTTPException(status_code=400, detail='Use application/json with {"password": "..."}.')
+    if not DEMO_PASSWORD:
+        raise HTTPException(status_code=503, detail="DEMO_PASSWORD is not configured.")
+
+    try:
+        payload = await request.json()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid JSON body.") from exc
+    if not isinstance(payload, dict) or not isinstance(payload.get("password"), str):
+        raise HTTPException(status_code=400, detail='JSON requests must use {"password": "..."}.')
+    if not secrets.compare_digest(payload["password"], DEMO_PASSWORD):
+        raise HTTPException(status_code=401, detail="Incorrect password.")
+
+    token = secrets.token_hex(32)
+    VALID_SESSION_TOKENS.add(token)
+    return {"token": token}
 
 
 @app.post("/ingest")

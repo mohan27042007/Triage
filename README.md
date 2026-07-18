@@ -24,7 +24,7 @@ This local-first slice accepts pasted text or a UTF-8 `.txt` file and classifies
    Copy-Item .env.example .env
    ```
 
-4. Edit `.env` and replace `your_openai_api_key_here` with your OpenAI API key. Never commit this file.
+4. Edit `.env`, replace `your_openai_api_key_here` with your OpenAI API key, and set `DEMO_PASSWORD` to the single shared password for this demo. Never commit this file.
 5. Start the API:
 
    ```powershell
@@ -57,6 +57,10 @@ py -m http.server 3000
 ```
 
 Open `http://localhost:3000` in your browser. Paste text or upload a UTF-8 `.txt` file, then select **Classify with Triage**.
+
+### Demo access gate
+
+Triage uses one shared `DEMO_PASSWORD` from `backend/.env`. Enter that password on the frontend login screen to receive an in-memory session token; restarting the backend invalidates all existing sessions. This is deliberately a single-user demo gate, not a real account system: it has no signup, password reset, password hashing infrastructure, multi-user support, or durable sessions.
 
 ### Queue smoke test
 

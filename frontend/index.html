@@ -10,7 +10,20 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <nav class="pulse-rail" aria-label="Triage sections">
+    <section id="login-screen" class="login-screen" aria-labelledby="login-title">
+      <form id="login-form" class="login-card">
+        <p class="eyebrow">TRIAGE / DEMO ACCESS</p>
+        <h1 id="login-title">Triage</h1>
+        <p class="intro">Enter the shared demo password to open your student desk.</p>
+        <label for="login-password">Password</label>
+        <input id="login-password" name="password" type="password" autocomplete="current-password" required />
+        <button type="submit">Open Triage</button>
+        <p id="login-error" class="error" role="alert"></p>
+      </form>
+    </section>
+
+    <div id="app-shell" hidden>
+      <nav class="pulse-rail" aria-label="Triage sections">
       <div class="rail-nodes">
         <button class="rail-node is-active" type="button" data-section="stream" aria-label="Stream/Ingest" aria-controls="stream-section" aria-current="location"><span class="rail-dot"></span><span class="rail-label">Stream/Ingest</span></button>
         <button class="rail-node" type="button" data-section="queue" aria-label="Action Queue" aria-controls="queue-section"><span class="rail-dot"></span><span class="rail-label">Action Queue</span></button>
@@ -18,9 +31,9 @@
         <button class="rail-node" type="button" data-section="pending" aria-label="Human Review" aria-controls="pending-section"><span class="rail-dot"></span><span class="rail-label">Human Review</span></button>
         <button class="rail-node" type="button" data-section="assignment" aria-label="Assignment Scaffold" aria-controls="assignment-section"><span class="rail-dot"></span><span class="rail-label">Assignment Scaffold</span></button>
       </div>
-    </nav>
+      </nav>
 
-    <main class="panel-scroller" tabindex="0" aria-label="Triage dashboard panels">
+      <main class="panel-scroller" tabindex="0" aria-label="Triage dashboard panels">
       <section id="stream-section" class="app-section glass-panel" tabindex="0" aria-labelledby="stream-title">
         <header class="dashboard-header">
           <p class="eyebrow">LOCAL-FIRST STUDENT DESK</p>
@@ -103,7 +116,8 @@
           <div id="assignment-history" class="assignment-history" aria-live="polite"></div>
         </div>
       </section>
-    </main>
+      </main>
+    </div>
     <script src="app.js"></script>
   </body>
 </html>
