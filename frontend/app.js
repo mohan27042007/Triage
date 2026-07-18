@@ -14,6 +14,12 @@ const railNodes = document.querySelectorAll(".rail-node");
 const appSections = document.querySelectorAll(".app-section");
 const panelScroller = document.querySelector(".panel-scroller");
 
+panelScroller.addEventListener("wheel", (event) => {
+  if (!event.deltaY) return;
+  panelScroller.scrollLeft += event.deltaY;
+  event.preventDefault();
+}, { passive: false });
+
 railNodes.forEach((railNode) => {
   railNode.addEventListener("click", () => scrollToSection(railNode.dataset.section));
 });
