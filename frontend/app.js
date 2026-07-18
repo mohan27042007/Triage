@@ -123,23 +123,52 @@ function escapeHtml(value) {
 }
 
 function isDeadlineWithin24Hours(deadline) {
-  if (!deadline) return false;
-  const isoMatch = deadline.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  const slashMatch = deadline.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (!isoMatch && !slashMatch) return false;
-
-  const [, first, second, third] = isoMatch || slashMatch;
-  const year = Number(isoMatch ? first : third);
-  const month = Number(isoMatch ? second : first);
-  const day = Number(isoMatch ? third : second);
-  const parsed = new Date(year, month - 1, day);
-  if (
-    parsed.getFullYear() !== year ||
-    parsed.getMonth() !== month - 1 ||
-    parsed.getDate() !== day
-  ) return false;
+  const parsed = parseDeadline(deadline);
+  if (!parsed) return false;
   const millisecondsUntilDeadline = parsed.getTime() - Date.now();
   return millisecondsUntilDeadline >= 0 && millisecondsUntilDeadline <= 24 * 60 * 60 * 1000;
+}
+
+function parseDeadline(deadline) {
+  if (!deadline) return null;
+  const normalized = deadline.trim();
+  const isoMatch = normalized.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const slashMatch = normalized.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  const humanReadableMatch = normalized.match(
+    /^(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday,\s+)?([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?(?:\s+at\s+(\d{1,2})(?::(\d{2}))?\s*(AM|PM))?$/i,
+  );
+
+  if (isoMatch) return createValidatedDate(Number(isoMatch[1]), Number(isoMatch[2]), Number(isoMatch[3]));
+  if (slashMatch) return createValidatedDate(Number(slashMatch[3]), Number(slashMatch[1]), Number(slashMatch[2]));
+  if (!humanReadableMatch) return null;
+
+  const [, monthName, dayText, yearText, hourText, minuteText, meridiem] = humanReadableMatch;
+  const month = new Date(`${monthName} 1, 2000`).getMonth() + 1;
+  if (!month) return null;
+
+  const now = new Date();
+  const year = yearText ? Number(yearText) : now.getFullYear();
+  let hour = hourText ? Number(hourText) : 0;
+  if (hourText && (hour < 1 || hour > 12)) return null;
+  if (meridiem) hour = (hour % 12) + (meridiem.toUpperCase() === "PM" ? 12 : 0);
+
+  let parsed = createValidatedDate(year, month, Number(dayText), hour, Number(minuteText || 0));
+  if (!parsed) return null;
+  if (!yearText && parsed < now) {
+    parsed = createValidatedDate(year + 1, month, Number(dayText), hour, Number(minuteText || 0));
+  }
+  return parsed;
+}
+
+function createValidatedDate(year, month, day, hour = 0, minute = 0) {
+  const parsed = new Date(year, month - 1, day, hour, minute);
+  return (
+    parsed.getFullYear() === year &&
+    parsed.getMonth() === month - 1 &&
+    parsed.getDate() === day &&
+    parsed.getHours() === hour &&
+    parsed.getMinutes() === minute
+  ) ? parsed : null;
 }
 
 loadQueue();
