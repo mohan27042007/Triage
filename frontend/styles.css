@@ -53,6 +53,7 @@ main { width: 100%; }
 .rail-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--node-color); transition: box-shadow 150ms ease, opacity 150ms ease, transform 150ms ease; }
 .rail-node.is-active { opacity: 1; }
 .rail-node.is-active .rail-dot { box-shadow: 0 0 0 4px color-mix(in srgb, var(--node-color) 18%, transparent), 0 0 12px var(--node-color); transform: scale(1.12); }
+.rail-node.is-arrival .rail-dot { animation: arrival-pulse 260ms ease-out; }
 .rail-label { position: absolute; left: 80px; top: 50%; width: max-content; padding: 5px 8px; border: 1px solid rgb(91 100 112 / 25%); border-radius: 5px; color: var(--paper); background: var(--surface); font: 12px "Inter", sans-serif; opacity: 0; pointer-events: none; transform: translate(-4px, -50%); transition: opacity 150ms ease, transform 150ms ease; }
 .rail-node:hover .rail-label, .rail-node:focus-visible .rail-label { opacity: 1; transform: translate(0, -50%); }
 .panel-scroller {
@@ -136,6 +137,26 @@ dt { color: var(--triage-slate); font-size: 12px; }
 dd { margin: 4px 0 0; font: 12px "JetBrains Mono", ui-monospace, monospace; letter-spacing: .02em; }
 .error { min-height: 18px; margin: 10px 0 0; color: var(--triage-red); font-size: 14px; }
 
+.classification-traveler {
+  position: fixed;
+  z-index: 40;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgb(246 243 236 / 85%);
+  border-radius: 999px;
+  pointer-events: none;
+  box-shadow: 0 0 18px currentColor;
+  will-change: transform, opacity;
+}
+.classification-traveler.obligation { color: var(--triage-red); background: var(--triage-red); }
+.classification-traveler.study-material { color: var(--triage-green); background: var(--triage-green); }
+.classification-traveler.noise { color: var(--triage-slate); background: var(--triage-slate); }
+
+@keyframes arrival-pulse {
+  45% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--node-color) 24%, transparent), 0 0 22px var(--node-color); transform: scale(1.42); }
+  100% { box-shadow: none; transform: scale(1); }
+}
+
 .queue-section, .study-section { margin-top: 0; }
 .queue-heading { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
 .queue-group + .queue-group { margin-top: 16px; }
@@ -216,4 +237,8 @@ dd { margin: 4px 0 0; font: 12px "JetBrains Mono", ui-monospace, monospace; lett
   .app-section { flex-basis: 92vw; min-height: calc(100vh - 24px); max-height: calc(100vh - 24px); padding: 28px 20px 28px 92px; }
   .queue-heading { align-items: start; flex-direction: column; }
   dl { gap: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rail-node.is-arrival .rail-dot { animation: none; }
 }

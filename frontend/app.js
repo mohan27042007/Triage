@@ -254,6 +254,57 @@ document.addEventListener("keydown", (event) => {
   scrollToSection(railNodes[nextIndex].dataset.section);
 });
 
+const classificationTravel = {
+  Obligation: { section: "queue", tone: "obligation" },
+  "Study Material": { section: "study", tone: "study-material" },
+  Noise: { tone: "noise" },
+};
+
+function playClassificationTravel(category) {
+  const destination = classificationTravel[category];
+  if (!destination || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    return Promise.resolve();
+  }
+
+  const source = result.getBoundingClientRect();
+  const traveler = document.createElement("span");
+  traveler.className = `classification-traveler ${destination.tone}`;
+  traveler.setAttribute("aria-hidden", "true");
+  traveler.style.left = `${source.left + source.width * 0.72}px`;
+  traveler.style.top = `${source.top + source.height * 0.38}px`;
+  document.body.append(traveler);
+
+  if (!destination.section) {
+    const animation = traveler.animate(
+      [{ opacity: 1, transform: "translate(-50%, -50%) scale(1)" }, { opacity: 0, transform: "translate(-50%, -50%) scale(.45)" }],
+      { duration: 520, easing: "ease-out", fill: "forwards" },
+    );
+    return animation.finished.finally(() => traveler.remove());
+  }
+
+  const target = document.querySelector(`.rail-node[data-section="${destination.section}"]`);
+  if (!target) {
+    traveler.remove();
+    return Promise.resolve();
+  }
+  const targetBounds = target.getBoundingClientRect();
+  const travelX = targetBounds.left + targetBounds.width / 2 - (source.left + source.width * 0.72);
+  const travelY = targetBounds.top + targetBounds.height / 2 - (source.top + source.height * 0.38);
+  const animation = traveler.animate(
+    [
+      { opacity: 1, transform: "translate(-50%, -50%) scale(1)" },
+      { opacity: 1, offset: 0.72, transform: `translate(calc(-50% + ${travelX * 0.72}px), calc(-50% + ${travelY * 0.72 - 30}px)) scale(.9)` },
+      { opacity: 0.35, transform: `translate(calc(-50% + ${travelX}px), calc(-50% + ${travelY}px)) scale(.45)` },
+    ],
+    { duration: 620, easing: "ease-out", fill: "forwards" },
+  );
+  return animation.finished.finally(() => {
+    traveler.remove();
+    target.classList.add("is-arrival");
+    window.setTimeout(() => target.classList.remove("is-arrival"), 260);
+  });
+}
+
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   error.textContent = "";
@@ -292,7 +343,11 @@ form.addEventListener("submit", async (event) => {
     document.querySelector("#deadline").textContent = data.deadline || "No explicit deadline";
     document.querySelector("#mandatory").textContent = data.mandatory === null ? "Not specified" : data.mandatory ? "Yes" : "No";
     result.hidden = false;
-    if (data.category === "Obligation") loadQueue();
+    button.disabled = false;
+    button.textContent = "Classify with Triage";
+    playClassificationTravel(data.category).then(() => {
+      if (data.category === "Obligation") loadQueue();
+    });
   } catch (requestError) {
     error.textContent = requestError.message;
   } finally {
