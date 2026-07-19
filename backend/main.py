@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 
 from assignment_helper import scaffold_assignment
 from classifier import build_study_plan, classify
+from classroom_sync import fetch_recent_classroom_items
 from gmail_sync import fetch_recent_gmail_messages
 from database import (
     create_assignment_help,
@@ -158,6 +159,29 @@ def sync_gmail() -> dict[str, int]:
                 classify(message["text"]),
                 source="gmail",
                 source_id=message["id"],
+            )
+            processed += 1
+        return {"processed": processed, "skipped": skipped}
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.post("/sources/classroom/sync")
+def sync_classroom() -> dict[str, int]:
+    """Classify new Classroom items while preserving IDs for deduplication."""
+    try:
+        items = fetch_recent_classroom_items()
+        processed = 0
+        skipped = 0
+        for item in items:
+            if get_item_by_source_id(item["id"]):
+                skipped += 1
+                continue
+            create_item(
+                item["text"],
+                classify(item["text"]),
+                source="classroom",
+                source_id=item["id"],
             )
             processed += 1
         return {"processed": processed, "skipped": skipped}

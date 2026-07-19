@@ -6,6 +6,8 @@ const error = document.querySelector("#error");
 const button = form.querySelector("button");
 const syncGmailButton = document.querySelector("#sync-gmail");
 const gmailSyncStatus = document.querySelector("#gmail-sync-status");
+const syncClassroomButton = document.querySelector("#sync-classroom");
+const classroomSyncStatus = document.querySelector("#classroom-sync-status");
 const queue = document.querySelector("#queue");
 const refreshQueueButton = document.querySelector("#refresh-queue");
 const studyForm = document.querySelector("#study-form");
@@ -373,6 +375,24 @@ syncGmailButton.addEventListener("click", async () => {
     gmailSyncStatus.textContent = requestError.message;
   } finally {
     syncGmailButton.disabled = false;
+  }
+});
+
+syncClassroomButton.addEventListener("click", async () => {
+  classroomSyncStatus.textContent = "Syncing Classroom…";
+  syncClassroomButton.disabled = true;
+  try {
+    const response = await apiFetch("http://localhost:8000/sources/classroom/sync", {
+      method: "POST",
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "Could not sync Classroom.");
+    classroomSyncStatus.textContent = `${data.processed} new, ${data.skipped} already seen`;
+    if (data.processed) loadQueue();
+  } catch (requestError) {
+    classroomSyncStatus.textContent = requestError.message;
+  } finally {
+    syncClassroomButton.disabled = false;
   }
 });
 

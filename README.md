@@ -37,6 +37,7 @@ The API will run at `http://localhost:8000`; visit `http://localhost:8000/docs` 
 
 - `POST /ingest` — accepts JSON (`{"text":"..."}`) or a multipart UTF-8 `.txt` upload (`file`); classifies and stores the item.
 - `POST /sources/gmail/sync` — imports and classifies up to 15 new Gmail inbox messages after Google authorization.
+- `POST /sources/classroom/sync` — imports and classifies recent announcements and coursework from active Google Classroom courses.
 - `GET /archive/{filename}` — downloads an authenticated locally archived upload.
 - `GET /queue` — returns open obligations grouped as `Immediate`, `This Week`, and `Later`.
 - `POST /queue/{id}/done` — creates a pending request to mark an open obligation done; it does not change the item yet.
@@ -76,7 +77,7 @@ Original `.txt` files submitted through Ingest and Study Plan uploads are retain
 python setup_google_auth.py
 ```
 
-The script opens a browser for read-only Gmail consent and also requests the Classroom read-only scopes needed by the next integration. It saves the refreshable local credentials to `backend/token.json`, which is also ignored by Git. Afterward, select **Sync Gmail** in Triage or call `POST /sources/gmail/sync` with the normal demo bearer token.
+The script opens a browser for read-only Gmail and Classroom consent. It saves the refreshable local credentials to `backend/token.json`, which is also ignored by Git. If you created a token before Classroom sync was added, run the setup script again to grant the additional read-only coursework scope. Afterward, select **Sync Gmail** or **Sync Classroom** in Triage, or call their matching `/sources/.../sync` endpoint with the normal demo bearer token.
 
 ### Queue smoke test
 
