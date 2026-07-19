@@ -36,6 +36,7 @@ The API will run at `http://localhost:8000`; visit `http://localhost:8000/docs` 
 ### API endpoints
 
 - `POST /ingest` — accepts JSON (`{"text":"..."}`) or a multipart UTF-8 `.txt` upload (`file`); classifies and stores the item.
+- `POST /sources/gmail/sync` — imports and classifies up to 15 new Gmail inbox messages after Google authorization.
 - `GET /archive/{filename}` — downloads an authenticated locally archived upload.
 - `GET /queue` — returns open obligations grouped as `Immediate`, `This Week`, and `Later`.
 - `POST /queue/{id}/done` — creates a pending request to mark an open obligation done; it does not change the item yet.
@@ -66,6 +67,16 @@ Triage uses one shared `DEMO_PASSWORD` from `backend/.env`. Enter that password 
 ### Attachment archive
 
 Original `.txt` files submitted through Ingest and Study Plan uploads are retained locally in `backend/archive/` under collision-resistant filenames. This folder is user data and is intentionally ignored by Git; download links in the queue and study topics retrieve the archived originals.
+
+### Google authorization and Gmail sync
+
+`backend/credentials.json` must contain a Google Cloud **Desktop app** OAuth client (it is intentionally ignored by Git). Install the backend requirements, then run this once from the backend directory:
+
+```powershell
+python setup_google_auth.py
+```
+
+The script opens a browser for read-only Gmail consent and also requests the Classroom read-only scopes needed by the next integration. It saves the refreshable local credentials to `backend/token.json`, which is also ignored by Git. Afterward, select **Sync Gmail** in Triage or call `POST /sources/gmail/sync` with the normal demo bearer token.
 
 ### Queue smoke test
 

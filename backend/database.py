@@ -30,7 +30,8 @@ def initialize_database() -> None:
                 source TEXT NOT NULL DEFAULT 'manual',
                 created_at TEXT NOT NULL,
                 status TEXT NOT NULL DEFAULT 'open',
-                archived_path TEXT
+                archived_path TEXT,
+                source_id TEXT
             )
             """
         )
@@ -74,8 +75,13 @@ def initialize_database() -> None:
             """
         )
         _add_column_if_missing(connection, "items", "archived_path", "TEXT")
+        _add_column_if_missing(connection, "items", "source_id", "TEXT")
         _add_column_if_missing(connection, "study_plans", "question_bank_archived_path", "TEXT")
         _add_column_if_missing(connection, "study_plans", "unit_notes_archived_path", "TEXT")
+        connection.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_items_source_id "
+            "ON items(source_id) WHERE source_id IS NOT NULL"
+        )
 
 
 def _add_column_if_missing(
@@ -88,15 +94,22 @@ def _add_column_if_missing(
 
 
 def create_item(
-    text: str, classification: dict[str, Any], archived_path: str | None = None
+    text: str,
+    classification: dict[str, Any],
+    archived_path: str | None = None,
+    source: str = "manual",
+    source_id: str | None = None,
 ) -> dict[str, Any] | None:
     """Persist one classified item and return the stored record."""
     created_at = datetime.now().astimezone().isoformat()
     with _connection() as connection:
         cursor = connection.execute(
             """
-            INSERT INTO items (text, category, reason, deadline, mandatory, source, created_at, status, archived_path)
-            VALUES (?, ?, ?, ?, ?, 'manual', ?, 'open', ?)
+            INSERT INTO items (
+                text, category, reason, deadline, mandatory, source,
+                created_at, status, archived_path, source_id
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)
             """,
             (
                 text.strip(),
@@ -104,8 +117,10 @@ def create_item(
                 classification["reason"],
                 classification["deadline"],
                 classification["mandatory"],
+                source,
                 created_at,
                 archived_path,
+                source_id,
             ),
         )
         item_id = cursor.lastrowid
@@ -115,6 +130,15 @@ def create_item(
 def get_item(item_id: int) -> dict[str, Any] | None:
     with _connection() as connection:
         row = connection.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+    return _row_to_item(row) if row else None
+
+
+def get_item_by_source_id(source_id: str) -> dict[str, Any] | None:
+    """Return one previously imported source item, if it exists."""
+    with _connection() as connection:
+        row = connection.execute(
+            "SELECT * FROM items WHERE source_id = ?", (source_id,)
+        ).fetchone()
     return _row_to_item(row) if row else None
 
 

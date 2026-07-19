@@ -14,12 +14,14 @@ from dotenv import load_dotenv
 
 from assignment_helper import scaffold_assignment
 from classifier import build_study_plan, classify
+from gmail_sync import fetch_recent_gmail_messages
 from database import (
     create_assignment_help,
     create_item,
     create_pending_action,
     approve_pending_action,
     get_item,
+    get_item_by_source_id,
     get_assignment_history,
     get_open_obligations,
     get_pending_actions,
@@ -138,6 +140,29 @@ def queue() -> dict[str, list[dict]]:
     for item in get_open_obligations():
         grouped[_queue_group(item)].append(item)
     return grouped
+
+
+@app.post("/sources/gmail/sync")
+def sync_gmail() -> dict[str, int]:
+    """Classify new inbox messages while preserving Gmail IDs for deduplication."""
+    try:
+        messages = fetch_recent_gmail_messages()
+        processed = 0
+        skipped = 0
+        for message in messages:
+            if get_item_by_source_id(message["id"]):
+                skipped += 1
+                continue
+            create_item(
+                message["text"],
+                classify(message["text"]),
+                source="gmail",
+                source_id=message["id"],
+            )
+            processed += 1
+        return {"processed": processed, "skipped": skipped}
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.post("/queue/{item_id}/done")

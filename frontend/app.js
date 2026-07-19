@@ -4,6 +4,8 @@ const fileInput = document.querySelector("#file");
 const result = document.querySelector("#result");
 const error = document.querySelector("#error");
 const button = form.querySelector("button");
+const syncGmailButton = document.querySelector("#sync-gmail");
+const gmailSyncStatus = document.querySelector("#gmail-sync-status");
 const queue = document.querySelector("#queue");
 const refreshQueueButton = document.querySelector("#refresh-queue");
 const studyForm = document.querySelector("#study-form");
@@ -353,6 +355,24 @@ form.addEventListener("submit", async (event) => {
   } finally {
     button.disabled = false;
     button.textContent = "Classify with Triage";
+  }
+});
+
+syncGmailButton.addEventListener("click", async () => {
+  gmailSyncStatus.textContent = "Syncing Gmail…";
+  syncGmailButton.disabled = true;
+  try {
+    const response = await apiFetch("http://localhost:8000/sources/gmail/sync", {
+      method: "POST",
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "Could not sync Gmail.");
+    gmailSyncStatus.textContent = `${data.processed} new, ${data.skipped} already seen`;
+    if (data.processed) loadQueue();
+  } catch (requestError) {
+    gmailSyncStatus.textContent = requestError.message;
+  } finally {
+    syncGmailButton.disabled = false;
   }
 });
 

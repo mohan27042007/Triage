@@ -85,6 +85,8 @@ docker-compose.override.yml
 sqlitedb
 backend/triage.db
 backend/archive/
+backend/credentials.json
+backend/token.json
 
 # Salt
 .salt
