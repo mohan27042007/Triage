@@ -77,7 +77,7 @@ Original `.txt` files submitted through Ingest and Study Plan uploads are retain
 python setup_google_auth.py
 ```
 
-The script opens a browser for read-only Gmail and Classroom consent. It saves the refreshable local credentials to `backend/token.json`, which is also ignored by Git. If you created a token before Classroom sync was added, run the setup script again to grant the additional read-only coursework scope. Afterward, select **Sync Gmail** or **Sync Classroom** in Triage, or call their matching `/sources/.../sync` endpoint with the normal demo bearer token.
+The script opens a browser for read-only Gmail and Classroom consent. It saves the refreshable local credentials to `backend/token.json`, which is also ignored by Git. Some Google Workspace domains grant a narrower scope set; the setup script preserves the granted token so permitted integrations can still run. If you created a token before Classroom sync was added, run the setup script again to request the additional read-only coursework scope. Afterward, select **Sync Gmail** or **Sync Classroom** in Triage, or call their matching `/sources/.../sync` endpoint with the normal demo bearer token.
 
 ### Queue smoke test
 

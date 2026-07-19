@@ -1,6 +1,7 @@
 """Run once locally to authorize Triage's read-only Google integrations."""
 
 import json
+import os
 from pathlib import Path
 
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -20,6 +21,10 @@ def main() -> None:
             "Create or download an OAuth client with the Desktop app type, then retry."
         )
 
+    # OAuthlib normally raises when Google grants a narrower Workspace scope
+    # set than requested. Keep the returned scope set so Gmail and permitted
+    # Classroom reads can still be used, rather than discarding the token.
+    os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
     flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_PATH, GOOGLE_SCOPES)
     credentials = flow.run_local_server()
     TOKEN_PATH.write_text(credentials.to_json(), encoding="utf-8")

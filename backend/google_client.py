@@ -22,7 +22,9 @@ def get_google_credentials() -> Credentials:
             "from the backend directory first."
         )
 
-    credentials = Credentials.from_authorized_user_file(TOKEN_PATH, GOOGLE_SCOPES)
+    # Preserve the scope set Google actually granted at consent time. Some
+    # Workspace domains return a narrower set than was requested.
+    credentials = Credentials.from_authorized_user_file(TOKEN_PATH)
     if credentials.valid:
         return credentials
     if not credentials.expired or not credentials.refresh_token:
