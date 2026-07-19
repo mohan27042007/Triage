@@ -36,6 +36,7 @@ The API will run at `http://localhost:8000`; visit `http://localhost:8000/docs` 
 ### API endpoints
 
 - `POST /ingest` — accepts JSON (`{"text":"..."}`) or a multipart UTF-8 `.txt` upload (`file`); classifies and stores the item.
+- `GET /archive/{filename}` — downloads an authenticated locally archived upload.
 - `GET /queue` — returns open obligations grouped as `Immediate`, `This Week`, and `Later`.
 - `POST /queue/{id}/done` — creates a pending request to mark an open obligation done; it does not change the item yet.
 - `GET /pending` — lists human-review actions awaiting a decision.
@@ -61,6 +62,10 @@ Open `http://localhost:3000` in your browser. Paste text or upload a UTF-8 `.txt
 ### Demo access gate
 
 Triage uses one shared `DEMO_PASSWORD` from `backend/.env`. Enter that password on the frontend login screen to receive an in-memory session token; restarting the backend invalidates all existing sessions. This is deliberately a single-user demo gate, not a real account system: it has no signup, password reset, password hashing infrastructure, multi-user support, or durable sessions.
+
+### Attachment archive
+
+Original `.txt` files submitted through Ingest and Study Plan uploads are retained locally in `backend/archive/` under collision-resistant filenames. This folder is user data and is intentionally ignored by Git; download links in the queue and study topics retrieve the archived originals.
 
 ### Queue smoke test
 

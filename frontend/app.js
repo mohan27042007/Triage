@@ -392,10 +392,39 @@ function queueItem(item) {
       <p class="summary">${escapeHtml(summary)}</p>
       <p class="muted">${escapeHtml(item.reason)}</p>
       <p class="metadata"><span class="deadline${deadlineClass}">${escapeHtml(deadline)}</span><span class="mandatory ${item.mandatory === true ? "is-mandatory" : "is-optional"}">${mandatory}</span></p>
+      ${archiveDownloadLink(item.archived_path)}
       <button class="done-button" type="button" data-item-id="${item.id}">Mark done</button>
     </article>
   `;
 }
+
+function archiveDownloadLink(archivedPath, label = "Download original") {
+  if (!archivedPath) return "";
+  const filename = escapeHtml(archivedPath);
+  return `<a class="download-original" href="http://localhost:8000/archive/${encodeURIComponent(archivedPath)}" data-archive-filename="${filename}">${label}</a>`;
+}
+
+document.addEventListener("click", async (event) => {
+  const link = event.target.closest(".download-original");
+  if (!link) return;
+
+  event.preventDefault();
+  try {
+    const response = await apiFetch(link.href);
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.detail || "Could not download the original file.");
+    }
+    const downloadUrl = URL.createObjectURL(await response.blob());
+    const downloadLink = document.createElement("a");
+    downloadLink.href = downloadUrl;
+    downloadLink.download = link.dataset.archiveFilename;
+    downloadLink.click();
+    URL.revokeObjectURL(downloadUrl);
+  } catch (requestError) {
+    error.textContent = requestError.message;
+  }
+});
 
 queue.addEventListener("click", async (event) => {
   const doneButton = event.target.closest(".done-button");
@@ -524,6 +553,7 @@ function renderStudyPlan(topics) {
       </summary>
       <div class="weight-track"><span style="width: ${item.weight * 10}%; --weight: ${item.weight}"></span></div>
       <ul>${item.subtopics.map((subtopic) => `<li>${escapeHtml(subtopic)}</li>`).join("")}</ul>
+      <div class="study-archive-links">${archiveDownloadLink(item.question_bank_archived_path, "Download question bank")}${archiveDownloadLink(item.unit_notes_archived_path, "Download unit notes")}</div>
     </details>
   `).join("");
 }

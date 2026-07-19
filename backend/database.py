@@ -29,7 +29,8 @@ def initialize_database() -> None:
                 mandatory INTEGER,
                 source TEXT NOT NULL DEFAULT 'manual',
                 created_at TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'open'
+                status TEXT NOT NULL DEFAULT 'open',
+                archived_path TEXT
             )
             """
         )
@@ -40,7 +41,9 @@ def initialize_database() -> None:
                 topic TEXT NOT NULL,
                 weight INTEGER NOT NULL,
                 subtopics TEXT NOT NULL,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                question_bank_archived_path TEXT,
+                unit_notes_archived_path TEXT
             )
             """
         )
@@ -70,16 +73,30 @@ def initialize_database() -> None:
             )
             """
         )
+        _add_column_if_missing(connection, "items", "archived_path", "TEXT")
+        _add_column_if_missing(connection, "study_plans", "question_bank_archived_path", "TEXT")
+        _add_column_if_missing(connection, "study_plans", "unit_notes_archived_path", "TEXT")
 
 
-def create_item(text: str, classification: dict[str, Any]) -> dict[str, Any] | None:
+def _add_column_if_missing(
+    connection: sqlite3.Connection, table: str, column: str, definition: str
+) -> None:
+    """Apply a small additive migration for existing local databases."""
+    columns = {row["name"] for row in connection.execute(f"PRAGMA table_info({table})")}
+    if column not in columns:
+        connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
+def create_item(
+    text: str, classification: dict[str, Any], archived_path: str | None = None
+) -> dict[str, Any] | None:
     """Persist one classified item and return the stored record."""
     created_at = datetime.now().astimezone().isoformat()
     with _connection() as connection:
         cursor = connection.execute(
             """
-            INSERT INTO items (text, category, reason, deadline, mandatory, source, created_at, status)
-            VALUES (?, ?, ?, ?, ?, 'manual', ?, 'open')
+            INSERT INTO items (text, category, reason, deadline, mandatory, source, created_at, status, archived_path)
+            VALUES (?, ?, ?, ?, ?, 'manual', ?, 'open', ?)
             """,
             (
                 text.strip(),
@@ -88,6 +105,7 @@ def create_item(text: str, classification: dict[str, Any]) -> dict[str, Any] | N
                 classification["deadline"],
                 classification["mandatory"],
                 created_at,
+                archived_path,
             ),
         )
         item_id = cursor.lastrowid
@@ -198,18 +216,32 @@ def reject_pending_action(action_id: int) -> dict[str, Any] | None:
     return _row_to_pending_action(updated)
 
 
-def replace_study_plan(topics: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def replace_study_plan(
+    topics: list[dict[str, Any]],
+    question_bank_archived_path: str | None = None,
+    unit_notes_archived_path: str | None = None,
+) -> list[dict[str, Any]]:
     """Store the latest study plan, replacing the previous local plan."""
     created_at = datetime.now().astimezone().isoformat()
     with _connection() as connection:
         connection.execute("DELETE FROM study_plans")
         connection.executemany(
             """
-            INSERT INTO study_plans (topic, weight, subtopics, created_at)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO study_plans (
+                topic, weight, subtopics, created_at,
+                question_bank_archived_path, unit_notes_archived_path
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
             [
-                (topic["topic"], topic["weight"], json.dumps(topic["subtopics"]), created_at)
+                (
+                    topic["topic"],
+                    topic["weight"],
+                    json.dumps(topic["subtopics"]),
+                    created_at,
+                    question_bank_archived_path,
+                    unit_notes_archived_path,
+                )
                 for topic in topics
             ],
         )
@@ -228,6 +260,8 @@ def get_study_plan() -> list[dict[str, Any]]:
             "weight": row["weight"],
             "subtopics": json.loads(row["subtopics"]),
             "created_at": row["created_at"],
+            "question_bank_archived_path": row["question_bank_archived_path"],
+            "unit_notes_archived_path": row["unit_notes_archived_path"],
         }
         for row in rows
     ]

@@ -3,12 +3,13 @@
 import os
 import re
 import secrets
+from uuid import uuid4
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request, UploadFile
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from dotenv import load_dotenv
 
 from assignment_helper import scaffold_assignment
@@ -33,6 +34,7 @@ load_dotenv()
 app = FastAPI(title="Triage API", version="0.1.0")
 DEMO_PASSWORD = os.getenv("DEMO_PASSWORD", "")
 VALID_SESSION_TOKENS: set[str] = set()
+ARCHIVE_DIRECTORY = Path(__file__).with_name("archive")
 
 initialize_database()
 
@@ -102,7 +104,7 @@ async def ingest(request: Request) -> dict:
         elif content_type.startswith("multipart/form-data"):
             form = await request.form()
             uploaded_file = form.get("file")
-            if not isinstance(uploaded_file, UploadFile) or not uploaded_file.filename:
+            if not hasattr(uploaded_file, "filename") or not uploaded_file.filename:
                 raise ValueError(
                     "Upload a .txt file using the 'file' field."
                 )
@@ -110,10 +112,7 @@ async def ingest(request: Request) -> dict:
                 raise ValueError(
                     "Only .txt files are supported in this local-first slice."
                 )
-            try:
-                text = (await uploaded_file.read()).decode("utf-8")
-            except UnicodeDecodeError as exc:
-                raise ValueError("The uploaded file must be UTF-8 encoded.") from exc
+            text, archived_path = await _read_and_archive_text_upload(uploaded_file, "file")
         else:
             raise ValueError("Use application/json or multipart/form-data.")
 
@@ -121,7 +120,11 @@ async def ingest(request: Request) -> dict:
             raise ValueError("Text is too long for classification.")
 
         classification = classify(text)
-        return create_item(text, classification)
+        return create_item(
+            text,
+            classification,
+            archived_path if content_type.startswith("multipart/form-data") else None,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
@@ -188,10 +191,18 @@ async def upload_study_materials(request: Request) -> dict[str, list[dict]]:
 
     try:
         form = await request.form()
-        question_bank = await _read_text_upload(form.get("question_bank"), "question_bank")
-        unit_notes = await _read_text_upload(form.get("unit_notes"), "unit_notes")
+        question_bank, question_bank_archived_path = await _read_and_archive_text_upload(
+            form.get("question_bank"), "question_bank"
+        )
+        unit_notes, unit_notes_archived_path = await _read_and_archive_text_upload(
+            form.get("unit_notes"), "unit_notes"
+        )
         topics = build_study_plan(question_bank, unit_notes)
-        return {"topics": replace_study_plan(topics)}
+        return {
+            "topics": replace_study_plan(
+                topics, question_bank_archived_path, unit_notes_archived_path
+            )
+        }
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
@@ -202,6 +213,17 @@ async def upload_study_materials(request: Request) -> dict[str, list[dict]]:
 def study_plan() -> dict[str, list[dict]]:
     """Return the persisted, highest-priority-first study topics."""
     return {"topics": get_study_plan()}
+
+
+@app.get("/archive/{filename}")
+def download_archive(filename: str) -> FileResponse:
+    """Serve one locally archived attachment without permitting path traversal."""
+    if not filename or "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=400, detail="Invalid archive filename.")
+    archived_file = ARCHIVE_DIRECTORY / filename
+    if not archived_file.is_file():
+        raise HTTPException(status_code=404, detail="Archived file not found.")
+    return FileResponse(archived_file, filename=filename, media_type="text/plain")
 
 
 @app.post("/assignment/help")
@@ -276,13 +298,24 @@ def _parse_deadline(deadline: str | None) -> date | None:
     return candidate if candidate >= today else candidate.replace(year=today.year + 1)
 
 
-async def _read_text_upload(uploaded_file: object, field_name: str) -> str:
-    """Validate and read one required UTF-8 .txt upload."""
+async def _read_and_archive_text_upload(uploaded_file: object, field_name: str) -> tuple[str, str]:
+    """Validate, archive, and decode one required UTF-8 .txt upload."""
     if not hasattr(uploaded_file, "filename") or not hasattr(uploaded_file, "read"):
         raise ValueError(f"Upload a .txt file using the '{field_name}' field.")
     if not uploaded_file.filename or Path(uploaded_file.filename).suffix.lower() != ".txt":
         raise ValueError(f"The '{field_name}' file must use the .txt extension.")
     try:
-        return (await uploaded_file.read()).decode("utf-8")
+        file_bytes = await uploaded_file.read()
+        text = file_bytes.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise ValueError(f"The '{field_name}' file must be UTF-8 encoded.") from exc
+    return text, _archive_upload(uploaded_file.filename, file_bytes)
+
+
+def _archive_upload(original_filename: str, file_bytes: bytes) -> str:
+    """Persist original upload bytes under a collision-resistant local filename."""
+    ARCHIVE_DIRECTORY.mkdir(exist_ok=True)
+    safe_filename = Path(original_filename).name
+    archived_filename = f"{uuid4()}_{safe_filename}"
+    (ARCHIVE_DIRECTORY / archived_filename).write_bytes(file_bytes)
+    return archived_filename
