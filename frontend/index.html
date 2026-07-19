@@ -39,6 +39,14 @@
         <span class="approval-ribbon-close" aria-hidden="true">×</span>
       </button>
 
+      <aside id="deadline-reminder" class="deadline-reminder" aria-live="polite" hidden>
+        <button id="deadline-reminder-navigate" class="deadline-reminder-message" type="button">
+          <span class="deadline-reminder-title">Deadline reminder</span>
+          <span id="deadline-reminder-text"></span>
+        </button>
+        <button id="deadline-reminder-dismiss" class="deadline-reminder-dismiss" type="button" aria-label="Dismiss deadline reminder">×</button>
+      </aside>
+
       <main class="panel-scroller" tabindex="0" aria-label="Triage dashboard panels">
       <section id="stream-section" class="app-section glass-panel" tabindex="0" aria-labelledby="stream-title">
         <header class="dashboard-header">

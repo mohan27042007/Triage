@@ -50,6 +50,13 @@ main { width: 100%; }
 .approval-ribbon.is-open { z-index: 31; color: var(--paper); background: var(--surface); }
 .approval-ribbon.is-open .approval-ribbon-arrow { display: none; }
 .approval-ribbon.is-open .approval-ribbon-close { display: inline; }
+.deadline-reminder { position: fixed; z-index: 21; top: 16px; left: 88px; display: flex; align-items: stretch; max-width: min(560px, calc(100vw - 360px)); overflow: hidden; border: 1px solid rgb(228 67 44 / 72%); border-radius: 6px; color: var(--paper); background: rgb(228 67 44 / 92%); box-shadow: 0 8px 20px rgb(0 0 0 / 24%); }
+.deadline-reminder-message { display: grid; gap: 2px; width: auto; margin: 0; padding: 10px 14px; border: 0; border-radius: 0; color: inherit; background: transparent; text-align: left; }
+.deadline-reminder-message:hover:not(:disabled) { box-shadow: none; transform: none; background: rgb(18 20 26 / 12%); }
+.deadline-reminder-title { font: 600 12px "JetBrains Mono", ui-monospace, monospace; letter-spacing: .02em; text-transform: uppercase; }
+.deadline-reminder-text { font-size: 14px; line-height: 1.35; }
+.deadline-reminder-dismiss { width: auto; min-width: 42px; margin: 0; border: 0; border-left: 1px solid rgb(246 243 236 / 30%); border-radius: 0; padding: 0 12px; color: inherit; background: transparent; font: 700 22px/1 "Inter", sans-serif; }
+.deadline-reminder-dismiss:hover:not(:disabled) { box-shadow: none; transform: none; background: rgb(18 20 26 / 16%); }
 .rail-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--node-color); transition: box-shadow 150ms ease, opacity 150ms ease, transform 150ms ease; }
 .rail-node.is-active { opacity: 1; }
 .rail-node.is-active .rail-dot { box-shadow: 0 0 0 4px color-mix(in srgb, var(--node-color) 18%, transparent), 0 0 12px var(--node-color); transform: scale(1.12); }
@@ -240,6 +247,7 @@ dd { margin: 4px 0 0; font: 12px "JetBrains Mono", ui-monospace, monospace; lett
 .assignment-prompt-preview { margin: 0 16px 14px; color: var(--triage-slate); font-size: 14px; line-height: 1.5; }
 
 @media (max-width: 560px) {
+  .deadline-reminder { top: 64px; left: 84px; max-width: calc(100vw - 100px); }
   .panel-scroller { gap: 12px; padding: 12px; }
   .app-section { flex-basis: 92vw; min-height: calc(100vh - 24px); max-height: calc(100vh - 24px); padding: 28px 20px 28px 92px; }
   .queue-heading { align-items: start; flex-direction: column; }

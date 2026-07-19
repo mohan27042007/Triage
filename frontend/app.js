@@ -4,6 +4,10 @@ const fileInput = document.querySelector("#file");
 const result = document.querySelector("#result");
 const error = document.querySelector("#error");
 const button = form.querySelector("button");
+const deadlineReminder = document.querySelector("#deadline-reminder");
+const deadlineReminderText = document.querySelector("#deadline-reminder-text");
+const deadlineReminderNavigate = document.querySelector("#deadline-reminder-navigate");
+const deadlineReminderDismiss = document.querySelector("#deadline-reminder-dismiss");
 const syncGmailButton = document.querySelector("#sync-gmail");
 const gmailSyncStatus = document.querySelector("#gmail-sync-status");
 const syncClassroomButton = document.querySelector("#sync-classroom");
@@ -34,6 +38,10 @@ const panelScroller = document.querySelector(".panel-scroller");
 let wheelNavigationLocked = false;
 let authToken = localStorage.getItem("triage-demo-token");
 let drawerTrigger = null;
+let deadlineReminderDismissed = false;
+let currentUrgentItems = [];
+const notifiedUrgentItemIds = new Set();
+const notificationRequestStorageKey = "triage-reminder-notification-requested";
 
 function showLoginScreen() {
   authToken = null;
@@ -404,6 +412,7 @@ async function loadQueue() {
     const response = await apiFetch("http://localhost:8000/queue");
     const groups = await response.json();
     if (!response.ok) throw new Error(groups.detail || "Could not load the queue.");
+    updateDeadlineReminder(groups.Immediate);
 
     const totalItems = Object.values(groups).reduce((total, items) => total + items.length, 0);
     if (!totalItems) {
@@ -421,6 +430,70 @@ async function loadQueue() {
     queue.innerHTML = `<p class="error">${requestError.message}</p>`;
   }
 }
+
+function updateDeadlineReminder(immediateItems) {
+  const urgentItems = (immediateItems || [])
+    .map((item) => ({ item, deadline: parseDeadline(item.deadline) }))
+    .filter(({ item }) => isDeadlineWithin24Hours(item.deadline))
+    .sort((first, second) => first.deadline - second.deadline);
+
+  currentUrgentItems = urgentItems.map(({ item }) => item);
+  notifyNewUrgentItems(currentUrgentItems);
+  if (deadlineReminderDismissed || !urgentItems.length) {
+    deadlineReminder.hidden = true;
+    return;
+  }
+
+  const nearest = urgentItems[0].item.deadline;
+  const count = urgentItems.length;
+  deadlineReminderText.textContent = `You have ${count} item${count === 1 ? "" : "s"} due soon — nearest: ${nearest}.`;
+  deadlineReminder.hidden = false;
+}
+
+function notifyNewUrgentItems(urgentItems) {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  const newlyDetected = urgentItems.filter((item) => !notifiedUrgentItemIds.has(item.id));
+  newlyDetected.forEach((item) => notifiedUrgentItemIds.add(item.id));
+  if (!newlyDetected.length) return;
+
+  const nearest = [...newlyDetected].sort((first, second) => parseDeadline(first.deadline) - parseDeadline(second.deadline))[0];
+  try {
+    new Notification("Triage deadline reminder", {
+      body: `${newlyDetected.length} item${newlyDetected.length === 1 ? "" : "s"} due soon. Nearest: ${nearest.deadline}.`,
+    });
+  } catch {
+    // The in-app banner remains available if the browser blocks notifications.
+  }
+}
+
+function requestReminderNotifications() {
+  if (
+    !("Notification" in window) ||
+    Notification.permission !== "default" ||
+    localStorage.getItem(notificationRequestStorageKey)
+  ) return;
+  localStorage.setItem(notificationRequestStorageKey, "true");
+  try {
+    const permissionRequest = Notification.requestPermission();
+    if (permissionRequest?.then) {
+      permissionRequest.then((permission) => {
+        if (permission === "granted") notifyNewUrgentItems(currentUrgentItems);
+      }).catch(() => {});
+    }
+  } catch {
+    // Notification permission is an optional enhancement.
+  }
+}
+
+deadlineReminderNavigate.addEventListener("click", () => {
+  requestReminderNotifications();
+  scrollToSection("queue");
+});
+
+deadlineReminderDismiss.addEventListener("click", () => {
+  deadlineReminderDismissed = true;
+  deadlineReminder.hidden = true;
+});
 
 function queueItem(item) {
   const summary = item.text.length > 150 ? `${item.text.slice(0, 150)}...` : item.text;
