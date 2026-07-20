@@ -84,6 +84,45 @@ python setup_google_auth.py
 
 The script opens a browser for read-only Gmail and Classroom consent. It saves the refreshable local credentials to `backend/token.json`, which is also ignored by Git. Some Google Workspace domains grant a narrower scope set; the setup script preserves the granted token so permitted integrations can still run. If you created a token before Classroom sync was added, run the setup script again to request the additional read-only coursework scope. Afterward, select **Sync Gmail** or **Sync Classroom** in Triage, or call their matching `/sources/.../sync` endpoint with the normal demo bearer token.
 
+## Deployment (Vercel + Railway)
+
+**Live URL:** Not deployed yet. After deployment, replace this line with `https://YOUR-TRIAGE.vercel.app`.
+
+Triage is prepared for a Vercel frontend and a Railway backend. This is suitable for a demo, with important limitations: the backend currently uses SQLite and a local archive directory, so hosted data can be lost when Railway redeploys or restarts. The in-memory demo sessions also reset on every backend restart. Use a managed database and object storage before treating this as a durable production service.
+
+Google Gmail and Classroom sync is **local-only in this deployment design**. `backend/token.json` and `backend/credentials.json` are intentionally ignored and are not transferred to Railway. Do not upload a desktop OAuth token as a hosted secret; the current OAuth flow is designed for a local browser callback. The hosted app will continue to work for manual ingestion, study plans, assignment scaffolds, and WhatsApp demo data, but Google-source sync will show the one-time setup guidance rather than work in the hosted environment.
+
+### Deploy the backend to Railway
+
+1. Push this repository to a Git provider that both services can access. Create or sign in to Railway yourself, then choose **New Project → Deploy from GitHub repo**.
+2. Select this repository. In the Railway service settings, set the **Root Directory** to `backend`. Railway will read `backend/railway.toml`, install `requirements.txt`, run `uvicorn main:app --host 0.0.0.0 --port $PORT`, and check `/health`.
+3. In the Railway **Variables** tab, add:
+
+   ```text
+   OPENAI_API_KEY=your_openai_api_key
+   DEMO_PASSWORD=a_long_shared_demo_password
+   CORS_ORIGINS=https://YOUR-TRIAGE.vercel.app
+   ```
+
+   Do not add `token.json`, `credentials.json`, or any local database/archive files.
+4. Deploy the service, then use Railway's **Generate Domain** action. Confirm `https://YOUR-RAILWAY-SERVICE.up.railway.app/health` returns `{"status":"ok"}`.
+
+### Deploy the frontend to Vercel
+
+1. Create or sign in to Vercel yourself, choose **Add New → Project**, and import the same repository.
+2. Keep the project root at the repository root so Vercel can serve `api/config.js`; set the **Output Directory** to `frontend` (the committed `vercel.json` supplies this value).
+3. In Vercel **Settings → Environment Variables**, add the public, non-secret value below for Production (and Preview if you want preview deployments to work):
+
+   ```text
+   TRIAGE_API_BASE_URL=https://YOUR-RAILWAY-SERVICE.up.railway.app
+   ```
+
+   The Vercel `api/config.js` function exposes only this public URL to the browser. Never put `OPENAI_API_KEY` or `DEMO_PASSWORD` in Vercel.
+4. Deploy. Copy the resulting `https://YOUR-TRIAGE.vercel.app` URL into Railway's `CORS_ORIGINS` variable, redeploy Railway, then reload Vercel.
+5. Smoke-test the deployed site: log in, ingest a manual message, load WhatsApp demo data, and verify the Action Queue. If Google-source cards are used, expect the documented local-only setup guidance.
+
+If hosted deployment is not practical for the demo, a recorded local run remains a valid fallback: it demonstrates the complete supported local workflow without claiming that the local Google OAuth setup works in a hosted environment.
+
 ### Queue smoke test
 
 1. Start the backend and frontend as above.

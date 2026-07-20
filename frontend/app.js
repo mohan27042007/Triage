@@ -8,12 +8,7 @@ const deadlineReminder = document.querySelector("#deadline-reminder");
 const deadlineReminderText = document.querySelector("#deadline-reminder-text");
 const deadlineReminderNavigate = document.querySelector("#deadline-reminder-navigate");
 const deadlineReminderDismiss = document.querySelector("#deadline-reminder-dismiss");
-const syncGmailButton = document.querySelector("#sync-gmail");
-const gmailSyncStatus = document.querySelector("#gmail-sync-status");
-const syncClassroomButton = document.querySelector("#sync-classroom");
-const classroomSyncStatus = document.querySelector("#classroom-sync-status");
-const loadWhatsappDemoButton = document.querySelector("#load-whatsapp-demo");
-const whatsappDemoStatus = document.querySelector("#whatsapp-demo-status");
+const connectedSourcesList = document.querySelector("#connected-sources-list");
 const queue = document.querySelector("#queue");
 const refreshQueueButton = document.querySelector("#refresh-queue");
 const studyForm = document.querySelector("#study-form");
@@ -44,6 +39,23 @@ let deadlineReminderDismissed = false;
 let currentUrgentItems = [];
 const notifiedUrgentItemIds = new Set();
 const notificationRequestStorageKey = "triage-reminder-notification-requested";
+const apiBaseUrl = (window.TRIAGE_API_BASE_URL || "http://localhost:8000").replace(/\/$/, "");
+const connectedSourcesStorageKey = "triage-connected-sources";
+const reconnectAfterDays = 30;
+const sourceDefinitions = {
+  gmail: { name: "Gmail", description: "Read recent inbox messages", endpoint: "/sources/gmail/sync", google: true },
+  classroom: { name: "Google Classroom", description: "Read announcements and coursework", endpoint: "/sources/classroom/sync", google: true },
+  whatsapp: { name: "WhatsApp", description: "Representative college-group messages only", endpoint: "/sources/whatsapp/demo-load", demo: true },
+  slack: { name: "Slack", description: "Team messages and notices", comingSoon: true },
+  teams: { name: "Microsoft Teams", description: "Course channels and updates", comingSoon: true },
+};
+let connectedSources = loadConnectedSources();
+let googleAuthorized = false;
+let syncingSource = null;
+
+function apiUrl(path) {
+  return `${apiBaseUrl}${path}`;
+}
 
 function showLoginScreen() {
   authToken = null;
@@ -71,6 +83,7 @@ function loadAppData() {
   loadStudyPlan();
   loadPendingActions();
   loadAssignmentHistory();
+  loadConnectedSourcesPanel();
 }
 
 function openApprovalDrawer(trigger = approvalTrigger) {
@@ -152,7 +165,7 @@ loginForm.addEventListener("submit", async (event) => {
   submitButton.disabled = true;
   submitButton.textContent = "Opening…";
   try {
-    const response = await fetch("http://localhost:8000/auth/login", {
+    const response = await fetch(apiUrl("/auth/login"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ password: loginPassword.value }),
@@ -337,7 +350,7 @@ form.addEventListener("submit", async (event) => {
   try {
     let response;
     if (text) {
-      response = await apiFetch("http://localhost:8000/ingest", {
+      response = await apiFetch(apiUrl("/ingest"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
@@ -345,7 +358,7 @@ form.addEventListener("submit", async (event) => {
     } else {
       const formData = new FormData();
       formData.append("file", file);
-      response = await apiFetch("http://localhost:8000/ingest", { method: "POST", body: formData });
+      response = await apiFetch(apiUrl("/ingest"), { method: "POST", body: formData });
     }
 
     const data = await response.json();
@@ -370,66 +383,133 @@ form.addEventListener("submit", async (event) => {
   }
 });
 
-syncGmailButton.addEventListener("click", async () => {
-  gmailSyncStatus.textContent = "Syncing Gmail…";
-  syncGmailButton.disabled = true;
+function loadConnectedSources() {
   try {
-    const response = await apiFetch("http://localhost:8000/sources/gmail/sync", {
-      method: "POST",
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || "Could not sync Gmail.");
-    gmailSyncStatus.textContent = `${data.processed} new, ${data.skipped} already seen`;
-    if (data.processed) loadQueue();
-  } catch (requestError) {
-    gmailSyncStatus.textContent = requestError.message;
-  } finally {
-    syncGmailButton.disabled = false;
+    return JSON.parse(localStorage.getItem(connectedSourcesStorageKey)) || {};
+  } catch {
+    return {};
   }
+}
+
+function saveConnectedSources() {
+  localStorage.setItem(connectedSourcesStorageKey, JSON.stringify(connectedSources));
+}
+
+async function loadConnectedSourcesPanel() {
+  try {
+    const response = await apiFetch(apiUrl("/sources/google/status"));
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "Could not check Google authorization.");
+    googleAuthorized = data.authorized;
+  } catch {
+    googleAuthorized = false;
+  }
+  renderConnectedSources();
+}
+
+function renderConnectedSources() {
+  connectedSourcesList.innerHTML = Object.entries(sourceDefinitions).map(([key, source]) => {
+    const state = connectedSources[key] || {};
+    const isSyncing = syncingSource === key;
+    const reconnectNeeded = source.google && state.connected && isReconnectDue(state.lastSynced);
+    const setupRequired = source.google && !googleAuthorized;
+    if (source.comingSoon) {
+      return `<article class="source-card is-coming-soon" aria-disabled="true"><div><p class="source-name">${source.name}</p><p class="muted">${source.description}</p></div><span class="coming-soon-tag">Coming soon</span></article>`;
+    }
+    const status = isSyncing
+      ? "Syncing…"
+      : state.error
+        ? state.error
+      : setupRequired
+        ? "One-time setup required"
+        : state.connected
+          ? `Last synced: ${formatRelativeTime(state.lastSynced)}`
+          : source.demo
+            ? "Load representative sample data"
+            : "Turn on to sync";
+    return `
+      <article class="source-card${state.connected ? " is-connected" : ""}" data-source="${key}">
+        <div class="source-card-copy">
+          <div class="source-title-row"><p class="source-name">${source.name}</p>${source.demo ? '<span class="demo-data-tag">Demo data</span>' : ""}</div>
+          <p class="muted">${source.description}</p>
+          <p class="source-status${setupRequired ? " setup-required" : ""}">${status}</p>
+          ${setupRequired ? '<p class="source-setup">In a terminal, run <code>cd backend</code> then <code>python setup_google_auth.py</code>. Return here and turn this source on.</p>' : ""}
+          ${reconnectNeeded ? `<button class="source-reconnect" type="button" data-reconnect-source="${key}">Reconnect</button>` : ""}
+        </div>
+        <label class="source-toggle" aria-label="${state.connected ? "Disconnect" : "Connect"} ${source.name}">
+          <input type="checkbox" data-source-toggle="${key}" ${state.connected ? "checked" : ""} ${isSyncing ? "disabled" : ""} />
+          <span class="source-toggle-slider"></span>
+        </label>
+      </article>
+    `;
+  }).join("");
+}
+
+function isReconnectDue(lastSynced) {
+  if (!lastSynced || Number.isNaN(new Date(lastSynced).getTime())) return false;
+  return Date.now() - new Date(lastSynced).getTime() > reconnectAfterDays * 24 * 60 * 60 * 1000;
+}
+
+function formatRelativeTime(timestamp) {
+  const elapsedMinutes = Math.max(0, Math.floor((Date.now() - new Date(timestamp).getTime()) / 60000));
+  if (elapsedMinutes < 1) return "just now";
+  if (elapsedMinutes < 60) return `${elapsedMinutes} minute${elapsedMinutes === 1 ? "" : "s"} ago`;
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours < 24) return `${elapsedHours} hour${elapsedHours === 1 ? "" : "s"} ago`;
+  const elapsedDays = Math.floor(elapsedHours / 24);
+  return `${elapsedDays} day${elapsedDays === 1 ? "" : "s"} ago`;
+}
+
+connectedSourcesList.addEventListener("change", async (event) => {
+  const toggle = event.target.closest("[data-source-toggle]");
+  if (!toggle) return;
+  const sourceKey = toggle.dataset.sourceToggle;
+  if (!toggle.checked) {
+    connectedSources[sourceKey] = { ...connectedSources[sourceKey], connected: false, error: null };
+    saveConnectedSources();
+    renderConnectedSources();
+    return;
+  }
+  await connectSource(sourceKey);
 });
 
-syncClassroomButton.addEventListener("click", async () => {
-  classroomSyncStatus.textContent = "Syncing Classroom…";
-  syncClassroomButton.disabled = true;
-  try {
-    const response = await apiFetch("http://localhost:8000/sources/classroom/sync", {
-      method: "POST",
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || "Could not sync Classroom.");
-    classroomSyncStatus.textContent = `${data.processed} new, ${data.skipped} already seen`;
-    if (data.processed) loadQueue();
-  } catch (requestError) {
-    classroomSyncStatus.textContent = requestError.message;
-  } finally {
-    syncClassroomButton.disabled = false;
-  }
+connectedSourcesList.addEventListener("click", async (event) => {
+  const reconnectButton = event.target.closest("[data-reconnect-source]");
+  if (reconnectButton) await connectSource(reconnectButton.dataset.reconnectSource);
 });
 
-loadWhatsappDemoButton.addEventListener("click", async () => {
-  whatsappDemoStatus.textContent = "Loading simulated WhatsApp messages…";
-  loadWhatsappDemoButton.disabled = true;
+async function connectSource(sourceKey) {
+  const source = sourceDefinitions[sourceKey];
+  if (source.google && !googleAuthorized) {
+    connectedSources[sourceKey] = { ...connectedSources[sourceKey], connected: false };
+    saveConnectedSources();
+    renderConnectedSources();
+    return;
+  }
+  syncingSource = sourceKey;
+  renderConnectedSources();
   try {
-    const response = await apiFetch("http://localhost:8000/sources/whatsapp/demo-load", {
-      method: "POST",
-    });
+    const response = await apiFetch(apiUrl(source.endpoint), { method: "POST" });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || "Could not load WhatsApp demo data.");
-    whatsappDemoStatus.textContent = data.message;
+    if (!response.ok) throw new Error(data.detail || `Could not sync ${source.name}.`);
+    connectedSources[sourceKey] = { connected: true, lastSynced: new Date().toISOString() };
+    saveConnectedSources();
     await loadQueue();
   } catch (requestError) {
-    whatsappDemoStatus.textContent = requestError.message;
+    connectedSources[sourceKey] = { ...connectedSources[sourceKey], connected: false, error: requestError.message };
+    saveConnectedSources();
   } finally {
-    loadWhatsappDemoButton.disabled = false;
+    syncingSource = null;
+    renderConnectedSources();
   }
-});
+}
 
 refreshQueueButton.addEventListener("click", loadQueue);
 
 async function loadQueue() {
   queue.innerHTML = "<p class=\"muted\">Loading queue…</p>";
   try {
-    const response = await apiFetch("http://localhost:8000/queue");
+    const response = await apiFetch(apiUrl("/queue"));
     const groups = await response.json();
     if (!response.ok) throw new Error(groups.detail || "Could not load the queue.");
     updateDeadlineReminder(groups.Immediate);
@@ -534,7 +614,7 @@ function queueItem(item) {
 function archiveDownloadLink(archivedPath, label = "Download original") {
   if (!archivedPath) return "";
   const filename = escapeHtml(archivedPath);
-  return `<a class="download-original" href="http://localhost:8000/archive/${encodeURIComponent(archivedPath)}" data-archive-filename="${filename}">${label}</a>`;
+  return `<a class="download-original" href="${apiUrl(`/archive/${encodeURIComponent(archivedPath)}`)}" data-archive-filename="${filename}">${label}</a>`;
 }
 
 document.addEventListener("click", async (event) => {
@@ -565,7 +645,7 @@ queue.addEventListener("click", async (event) => {
 
   doneButton.disabled = true;
   try {
-    const response = await apiFetch(`http://localhost:8000/queue/${doneButton.dataset.itemId}/done`, { method: "POST" });
+    const response = await apiFetch(apiUrl(`/queue/${doneButton.dataset.itemId}/done`), { method: "POST" });
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || "Could not update this item.");
     await loadPendingActions(data.id);
@@ -647,7 +727,7 @@ studyForm.addEventListener("submit", async (event) => {
   button.textContent = "Building plan…";
 
   try {
-    const response = await apiFetch("http://localhost:8000/study/upload", {
+    const response = await apiFetch(apiUrl("/study/upload"), {
       method: "POST",
       body: new FormData(studyForm),
     });
@@ -664,7 +744,7 @@ studyForm.addEventListener("submit", async (event) => {
 
 async function loadStudyPlan() {
   try {
-    const response = await apiFetch("http://localhost:8000/study/plan");
+    const response = await apiFetch(apiUrl("/study/plan"));
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || "Could not load the study plan.");
     renderStudyPlan(data.topics);
@@ -693,7 +773,7 @@ function renderStudyPlan(topics) {
 
 async function loadPendingActions(highlightedActionId = null) {
   try {
-    const response = await apiFetch("http://localhost:8000/pending");
+    const response = await apiFetch(apiUrl("/pending"));
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || "Could not load pending actions.");
     renderPendingActions(data.actions, highlightedActionId);
@@ -733,7 +813,7 @@ pendingActions.addEventListener("click", async (event) => {
   actionButton.disabled = true;
   try {
     const response = await apiFetch(
-      `http://localhost:8000/pending/${actionButton.dataset.actionId}/${decision}`,
+      apiUrl(`/pending/${actionButton.dataset.actionId}/${decision}`),
       { method: "POST" },
     );
     const data = await response.json();
@@ -760,7 +840,7 @@ assignmentForm.addEventListener("submit", async (event) => {
   submitButton.disabled = true;
   submitButton.textContent = "Building scaffold…";
   try {
-    const response = await apiFetch("http://localhost:8000/assignment/help", {
+    const response = await apiFetch(apiUrl("/assignment/help"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt }),
@@ -779,7 +859,7 @@ assignmentForm.addEventListener("submit", async (event) => {
 
 async function loadAssignmentHistory() {
   try {
-    const response = await apiFetch("http://localhost:8000/assignment/history");
+    const response = await apiFetch(apiUrl("/assignment/history"));
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || "Could not load assignment history.");
     renderAssignmentHistory(data.assignments);

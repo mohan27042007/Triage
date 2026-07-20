@@ -16,6 +16,7 @@ from assignment_helper import scaffold_assignment
 from classifier import build_study_plan, classify
 from classroom_sync import fetch_recent_classroom_items
 from gmail_sync import fetch_recent_gmail_messages
+from google_client import TOKEN_PATH
 from whatsapp_demo_data import WHATSAPP_DEMO_MESSAGES, WHATSAPP_DEMO_SOURCE
 from database import (
     create_assignment_help,
@@ -40,6 +41,12 @@ app = FastAPI(title="Triage API", version="0.1.0")
 DEMO_PASSWORD = os.getenv("DEMO_PASSWORD", "")
 VALID_SESSION_TOKENS: set[str] = set()
 ARCHIVE_DIRECTORY = Path(__file__).with_name("archive")
+DEFAULT_CORS_ORIGINS = "http://localhost:3000,http://127.0.0.1:3000"
+CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", DEFAULT_CORS_ORIGINS).split(",")
+    if origin.strip()
+]
 
 initialize_database()
 
@@ -59,7 +66,7 @@ async def require_demo_auth(request: Request, call_next):
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -143,6 +150,12 @@ def queue() -> dict[str, list[dict]]:
     for item in get_open_obligations():
         grouped[_queue_group(item)].append(item)
     return grouped
+
+
+@app.get("/sources/google/status")
+def google_source_status() -> dict[str, bool]:
+    """Report whether the local Google OAuth setup has completed."""
+    return {"authorized": TOKEN_PATH.is_file()}
 
 
 @app.post("/sources/gmail/sync")
