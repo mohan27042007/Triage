@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 DATABASE_PATH = Path(__file__).with_name("triage.db")
+VALID_ITEM_SOURCES = {"manual", "gmail", "classroom", "whatsapp-demo"}
 
 
 def _connection() -> sqlite3.Connection:
@@ -101,6 +102,8 @@ def create_item(
     source_id: str | None = None,
 ) -> dict[str, Any] | None:
     """Persist one classified item and return the stored record."""
+    if source not in VALID_ITEM_SOURCES:
+        raise ValueError(f"Unsupported item source: {source}")
     created_at = datetime.now().astimezone().isoformat()
     with _connection() as connection:
         cursor = connection.execute(
@@ -140,6 +143,17 @@ def get_item_by_source_id(source_id: str) -> dict[str, Any] | None:
             "SELECT * FROM items WHERE source_id = ?", (source_id,)
         ).fetchone()
     return _row_to_item(row) if row else None
+
+
+def has_items_from_source(source: str) -> bool:
+    """Return whether any persisted items came from one known source."""
+    if source not in VALID_ITEM_SOURCES:
+        raise ValueError(f"Unsupported item source: {source}")
+    with _connection() as connection:
+        row = connection.execute(
+            "SELECT 1 FROM items WHERE source = ? LIMIT 1", (source,)
+        ).fetchone()
+    return row is not None
 
 
 def get_open_obligations() -> list[dict[str, Any]]:

@@ -12,6 +12,8 @@ const syncGmailButton = document.querySelector("#sync-gmail");
 const gmailSyncStatus = document.querySelector("#gmail-sync-status");
 const syncClassroomButton = document.querySelector("#sync-classroom");
 const classroomSyncStatus = document.querySelector("#classroom-sync-status");
+const loadWhatsappDemoButton = document.querySelector("#load-whatsapp-demo");
+const whatsappDemoStatus = document.querySelector("#whatsapp-demo-status");
 const queue = document.querySelector("#queue");
 const refreshQueueButton = document.querySelector("#refresh-queue");
 const studyForm = document.querySelector("#study-form");
@@ -404,6 +406,24 @@ syncClassroomButton.addEventListener("click", async () => {
   }
 });
 
+loadWhatsappDemoButton.addEventListener("click", async () => {
+  whatsappDemoStatus.textContent = "Loading simulated WhatsApp messages…";
+  loadWhatsappDemoButton.disabled = true;
+  try {
+    const response = await apiFetch("http://localhost:8000/sources/whatsapp/demo-load", {
+      method: "POST",
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "Could not load WhatsApp demo data.");
+    whatsappDemoStatus.textContent = data.message;
+    await loadQueue();
+  } catch (requestError) {
+    whatsappDemoStatus.textContent = requestError.message;
+  } finally {
+    loadWhatsappDemoButton.disabled = false;
+  }
+});
+
 refreshQueueButton.addEventListener("click", loadQueue);
 
 async function loadQueue() {
@@ -504,7 +524,7 @@ function queueItem(item) {
     <article class="queue-item" data-item-id="${item.id}">
       <p class="summary">${escapeHtml(summary)}</p>
       <p class="muted">${escapeHtml(item.reason)}</p>
-      <p class="metadata"><span class="deadline${deadlineClass}">${escapeHtml(deadline)}</span><span class="mandatory ${item.mandatory === true ? "is-mandatory" : "is-optional"}">${mandatory}</span></p>
+      <p class="metadata"><span class="deadline${deadlineClass}">${escapeHtml(deadline)}</span><span class="mandatory ${item.mandatory === true ? "is-mandatory" : "is-optional"}">${mandatory}</span>${item.source === "whatsapp-demo" ? '<span class="simulated-tag">Simulated</span>' : ""}</p>
       ${archiveDownloadLink(item.archived_path)}
       <button class="done-button" type="button" data-item-id="${item.id}">Mark done</button>
     </article>

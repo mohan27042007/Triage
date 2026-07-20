@@ -16,6 +16,7 @@ from assignment_helper import scaffold_assignment
 from classifier import build_study_plan, classify
 from classroom_sync import fetch_recent_classroom_items
 from gmail_sync import fetch_recent_gmail_messages
+from whatsapp_demo_data import WHATSAPP_DEMO_MESSAGES, WHATSAPP_DEMO_SOURCE
 from database import (
     create_assignment_help,
     create_item,
@@ -23,6 +24,7 @@ from database import (
     approve_pending_action,
     get_item,
     get_item_by_source_id,
+    has_items_from_source,
     get_assignment_history,
     get_open_obligations,
     get_pending_actions,
@@ -187,6 +189,34 @@ def sync_classroom() -> dict[str, int]:
         return {"processed": processed, "skipped": skipped}
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.post("/sources/whatsapp/demo-load")
+def load_whatsapp_demo_data() -> dict[str, int | bool | str]:
+    """Classify and persist the representative, non-live WhatsApp demo messages."""
+    if has_items_from_source(WHATSAPP_DEMO_SOURCE):
+        return {
+            "processed": 0,
+            "already_loaded": True,
+            "message": "WhatsApp demo data is already loaded.",
+        }
+
+    try:
+        for index, message in enumerate(WHATSAPP_DEMO_MESSAGES, start=1):
+            create_item(
+                message,
+                classify(message),
+                source=WHATSAPP_DEMO_SOURCE,
+                source_id=f"whatsapp-demo-{index}",
+            )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    return {
+        "processed": len(WHATSAPP_DEMO_MESSAGES),
+        "already_loaded": False,
+        "message": f"Loaded {len(WHATSAPP_DEMO_MESSAGES)} simulated WhatsApp messages.",
+    }
 
 
 @app.post("/queue/{item_id}/done")

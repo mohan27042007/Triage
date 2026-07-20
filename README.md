@@ -3,7 +3,11 @@ Triage uses Codex to sort scattered WhatsApp, email, and Classroom chaos into a 
 
 ## Local-first classification core
 
-This local-first slice accepts pasted text or a UTF-8 `.txt` file and classifies it with GPT-5.6 Luna as an **Obligation**, **Study Material**, or **Noise** item. Every result is persisted locally in SQLite. Open obligations appear in an Action Queue, where they can be marked done. It deliberately has no Gmail, Classroom, WhatsApp, OAuth, or automated-action integration yet.
+This local-first slice accepts pasted text or a UTF-8 `.txt` file and classifies it with GPT-5.6 Luna as an **Obligation**, **Study Material**, or **Noise** item. Every result is persisted locally in SQLite. Open obligations appear in an Action Queue, where they can be marked done.
+
+### WhatsApp demo data, not a live integration
+
+Triage does not connect to WhatsApp. The **Load WhatsApp Demo Data** control classifies a small set of clearly labeled, representative college-group messages and marks resulting queue items as **Simulated**. This demonstrates the WhatsApp use case without relying on an unofficial WhatsApp API, consistent with the hackathon's third-party authorization requirements.
 
 ## Running locally
 
@@ -38,6 +42,7 @@ The API will run at `http://localhost:8000`; visit `http://localhost:8000/docs` 
 - `POST /ingest` — accepts JSON (`{"text":"..."}`) or a multipart UTF-8 `.txt` upload (`file`); classifies and stores the item.
 - `POST /sources/gmail/sync` — imports and classifies up to 15 new Gmail inbox messages after Google authorization.
 - `POST /sources/classroom/sync` — imports and classifies recent announcements and coursework from active Google Classroom courses.
+- `POST /sources/whatsapp/demo-load` — classifies and persists the representative simulated WhatsApp messages once; it is not a live WhatsApp integration.
 - `GET /archive/{filename}` — downloads an authenticated locally archived upload.
 - `GET /queue` — returns open obligations grouped as `Immediate`, `This Week`, and `Later`.
 - `POST /queue/{id}/done` — creates a pending request to mark an open obligation done; it does not change the item yet.
