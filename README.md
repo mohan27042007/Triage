@@ -9,6 +9,12 @@ This local-first slice accepts pasted text or a UTF-8 `.txt` file and classifies
 
 Triage does not connect to WhatsApp. The **Load WhatsApp Demo Data** control classifies a small set of clearly labeled, representative college-group messages and marks resulting queue items as **Simulated**. This demonstrates the WhatsApp use case without relying on an unofficial WhatsApp API, consistent with the hackathon's third-party authorization requirements.
 
+## How Codex was used
+
+The project owner set the product direction and made the key product, engineering, and design decisions: a local-first student desk, a human approval layer before changes, the Pulse Rail/glass-panel interface, authorized Google read-only sources, and a simulated WhatsApp path instead of an unofficial live integration. Codex accelerated the implementation and iteration of that direction: the commit history records the scaffold and local classification core, persistent Action Queue, Study Plan, approval workflow, design-system passes, assignment scaffolding, attachment archiving, Google ingestion, deadline reminders, simulated WhatsApp data, and deployment configuration.
+
+The configured GPT-5.6 model (`gpt-5.6-luna`) is part of the product itself, not just the development process. It classifies incoming text into Obligation, Study Material, or Noise with structured fields; ranks topics and produces study-plan outlines from a question bank and notes; and creates planning-only Assignment Scaffolds with requirements, concepts, approach steps, and test cases. Codex helped connect those model-backed workflows to the FastAPI, SQLite, and vanilla-JavaScript product surface, while the owner retained decision-making over what the product should do and which integrations were appropriate.
+
 ## Running locally
 
 ### Backend

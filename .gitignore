@@ -84,6 +84,7 @@ docker-compose.override.yml
 # Database files
 *.db
 *.db.bak
+backend/triage.db.*.bak
 sqlitedb
 backend/triage.db
 backend/archive/
