@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from dotenv import load_dotenv
 
 from assignment_helper import scaffold_assignment
-from classifier import build_study_plan, classify
+from classifier import build_study_plan, classify, draft_poll_or_form_response
 from classroom_sync import fetch_recent_classroom_items
 from gmail_sync import fetch_recent_gmail_messages
 from google_client import TOKEN_PATH
@@ -238,13 +238,18 @@ def request_queue_item_completion(item_id: int) -> dict:
     item = get_item(item_id)
     if not item or item["category"] != "Obligation" or item["status"] != "open":
         raise HTTPException(status_code=404, detail="Open queue item not found.")
+    payload = {
+        "message": f"Mark '{item['text'][:120]}' as done?",
+        "item_text": item["text"],
+    }
+    if item.get("is_poll_or_form"):
+        drafted_response = draft_poll_or_form_response(item["text"])
+        if drafted_response:
+            payload["drafted_response"] = drafted_response
     return create_pending_action(
         item_id=item_id,
         action_type="mark_done",
-        payload={
-            "message": f"Mark '{item['text'][:120]}' as done?",
-            "item_text": item["text"],
-        },
+        payload=payload,
     )
 
 

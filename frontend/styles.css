@@ -141,6 +141,8 @@ form, .result {
 .source-toggle input:focus-visible + .source-toggle-slider { outline: 2px solid var(--paper); outline-offset: 3px; }
 .source-toggle input:disabled + .source-toggle-slider { cursor: wait; opacity: .65; }
 .source-reconnect { width: auto; margin: 8px 0 0; padding: 6px 9px; color: var(--ink); background: var(--triage-amber); font-size: 12px; }
+.drafted-response-label { margin-top: 14px; }
+.drafted-response { min-height: 76px; margin-bottom: 8px; font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 13px; }
 .coming-soon-tag, .demo-data-tag { display: inline-block; border-radius: 999px; padding: 2px 6px; font: 600 10px/1.2 "JetBrains Mono", ui-monospace, monospace; letter-spacing: .04em; text-transform: uppercase; }
 .coming-soon-tag { color: var(--paper); background: rgb(91 100 112 / 45%); }
 .demo-data-tag, .simulated-tag { display: inline-block; border-radius: 999px; padding: 2px 6px; font: 600 10px/1.2 "JetBrains Mono", ui-monospace, monospace; letter-spacing: .04em; text-transform: uppercase; }

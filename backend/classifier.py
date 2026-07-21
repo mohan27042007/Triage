@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 from typing import Any
 
 from dotenv import load_dotenv
@@ -25,7 +26,10 @@ Classify the supplied text into exactly one category:
 Extract a deadline only when the text explicitly gives one. Preserve it as a concise
 human-readable string instead of guessing a date. Set mandatory to true only for an
 explicit requirement, false for an explicitly optional item, and null when the text
- does not say. Give a concise, evidence-based reason. Do not invent facts."""
+does not say. Set is_poll_or_form to true only for an Obligation that asks the student
+to reply to a completion poll (for example, "reply YES if done") or complete a simple
+form with named fields (for example, "fill in name and roll number"). Otherwise set it
+to false. Give a concise, evidence-based reason. Do not invent facts."""
 
 CLASSIFICATION_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -38,6 +42,7 @@ CLASSIFICATION_SCHEMA: dict[str, Any] = {
         "reason": {"type": "string"},
         "deadline": {"type": ["string", "null"]},
         "mandatory": {"type": ["boolean", "null"]},
+        "is_poll_or_form": {"type": "boolean", "default": False},
     },
     "required": ["category", "reason", "deadline", "mandatory"],
 }
@@ -108,6 +113,30 @@ def classify(text: str) -> dict[str, Any]:
         ) from exc
 
     return result
+
+
+def draft_poll_or_form_response(text: str) -> str | None:
+    """Create a conservative, copy-only response draft from explicit message wording."""
+    normalized = " ".join(text.split())
+    completion_reply = re.search(r"\breply\s+(yes|no|done|completed)\b", normalized, re.IGNORECASE)
+    if completion_reply:
+        response = completion_reply.group(1).upper()
+        return f"Suggested reply: {response}, completed"
+
+    field_labels: list[str] = []
+    for label, pattern in (
+        ("Name", r"\b(?:full\s+)?name\b"),
+        ("Roll number", r"\broll\s*(?:number|no\.?|#)?\b"),
+        ("Email", r"\b(?:email|e-mail)\b"),
+        ("Phone number", r"\b(?:phone|mobile)(?:\s+number)?\b"),
+    ):
+        if re.search(pattern, normalized, re.IGNORECASE):
+            field_labels.append(label)
+    if field_labels:
+        return "Suggested form response:\n" + "\n".join(
+            f"{label}: [enter your {label.lower()}]" for label in field_labels
+        )
+    return None
 
 
 def build_study_plan(question_bank: str, unit_notes: str) -> list[dict[str, Any]]:

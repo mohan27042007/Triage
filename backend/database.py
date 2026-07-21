@@ -32,7 +32,8 @@ def initialize_database() -> None:
                 created_at TEXT NOT NULL,
                 status TEXT NOT NULL DEFAULT 'open',
                 archived_path TEXT,
-                source_id TEXT
+                source_id TEXT,
+                is_poll_or_form INTEGER NOT NULL DEFAULT 0
             )
             """
         )
@@ -77,6 +78,7 @@ def initialize_database() -> None:
         )
         _add_column_if_missing(connection, "items", "archived_path", "TEXT")
         _add_column_if_missing(connection, "items", "source_id", "TEXT")
+        _add_column_if_missing(connection, "items", "is_poll_or_form", "INTEGER NOT NULL DEFAULT 0")
         _add_column_if_missing(connection, "study_plans", "question_bank_archived_path", "TEXT")
         _add_column_if_missing(connection, "study_plans", "unit_notes_archived_path", "TEXT")
         connection.execute(
@@ -110,9 +112,9 @@ def create_item(
             """
             INSERT INTO items (
                 text, category, reason, deadline, mandatory, source,
-                created_at, status, archived_path, source_id
+                created_at, status, archived_path, source_id, is_poll_or_form
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)
             """,
             (
                 text.strip(),
@@ -124,6 +126,7 @@ def create_item(
                 created_at,
                 archived_path,
                 source_id,
+                bool(classification.get("is_poll_or_form", False)),
             ),
         )
         item_id = cursor.lastrowid
@@ -341,6 +344,7 @@ def get_assignment_history() -> list[dict[str, Any]]:
 def _row_to_item(row: sqlite3.Row) -> dict[str, Any]:
     item = dict(row)
     item["mandatory"] = None if item["mandatory"] is None else bool(item["mandatory"])
+    item["is_poll_or_form"] = bool(item.get("is_poll_or_form", False))
     return item
 
 

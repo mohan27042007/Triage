@@ -797,6 +797,11 @@ function renderPendingActions(actions, highlightedActionId = null) {
     <article class="pending-action${action.id === highlightedActionId ? " is-highlighted" : ""}" data-action-id="${action.id}">
       <p class="summary">${escapeHtml(action.payload.message)}</p>
       <p class="muted">Triage will not make this change until you approve it.</p>
+      ${action.payload.drafted_response ? `
+        <label class="drafted-response-label" for="drafted-response-${action.id}">Draft to copy and send yourself</label>
+        <textarea id="drafted-response-${action.id}" class="drafted-response" rows="3">${escapeHtml(action.payload.drafted_response)}</textarea>
+        <p class="muted">Editing or approving this draft does not send it anywhere.</p>
+      ` : ""}
       <div class="pending-buttons">
         <button class="approve-button" type="button" data-action-id="${action.id}">Approve</button>
         <button class="reject-button secondary" type="button" data-action-id="${action.id}">Reject</button>
