@@ -71,7 +71,8 @@
 
     <div id="app-shell" hidden>
       <nav class="pulse-rail" aria-label="Triage sections">
-      <div class="rail-nodes">
+      <div class="rail-toggle" style="--active-index: 0">
+        <span class="rail-toggle-thumb" aria-hidden="true"></span>
         <button class="rail-node is-active" type="button" data-section="stream" aria-label="Stream/Ingest" aria-controls="stream-section" aria-current="location"><span class="rail-dot"></span><span class="rail-label">Stream/Ingest</span></button>
         <button class="rail-node" type="button" data-section="queue" aria-label="Action Queue" aria-controls="queue-section"><span class="rail-dot"></span><span class="rail-label">Action Queue</span></button>
         <button class="rail-node" type="button" data-section="study" aria-label="Study Plan" aria-controls="study-section"><span class="rail-dot"></span><span class="rail-label">Study Plan</span></button>
@@ -120,14 +121,11 @@
           <button type="submit">Classify with Triage</button>
         </form>
         <section class="connected-sources" aria-labelledby="connected-sources-title">
-          <div class="connected-sources-heading">
-            <div>
-              <p class="eyebrow">CONNECTED SOURCES</p>
-              <h3 id="connected-sources-title">Choose what Triage can review</h3>
-            </div>
-            <p class="muted">Connections stay on this device.</p>
-          </div>
-          <div id="connected-sources-list" class="connected-sources-list" aria-live="polite"></div>
+          <button id="connected-sources-toggle" class="connected-sources-toggle" type="button" aria-expanded="false" aria-controls="connected-sources-list">
+            <span><span class="eyebrow">CONNECTED SOURCES</span><span id="connected-sources-title" class="connected-sources-title">Choose what Triage can review</span></span>
+            <span class="connected-sources-summary"><span>Manage sources</span><span class="disclosure-chevron" aria-hidden="true">⌄</span></span>
+          </button>
+          <div id="connected-sources-list" class="connected-sources-list" aria-live="polite" hidden></div>
         </section>
 
         <section id="result" class="result" aria-live="polite" hidden>
@@ -196,6 +194,13 @@
             </div>
           </div>
           <div id="pending-actions" class="pending-actions" aria-live="polite"></div>
+        </aside>
+      </div>
+      <div id="detail-layer" class="detail-layer" aria-hidden="true">
+        <div class="detail-scrim" data-close-detail></div>
+        <aside id="detail-dialog" class="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="detail-title" tabindex="-1">
+          <button id="detail-close" class="detail-close" type="button" aria-label="Close detail">×</button>
+          <div id="detail-content"></div>
         </aside>
       </div>
     </div>

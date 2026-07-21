@@ -9,6 +9,7 @@ const deadlineReminderText = document.querySelector("#deadline-reminder-text");
 const deadlineReminderNavigate = document.querySelector("#deadline-reminder-navigate");
 const deadlineReminderDismiss = document.querySelector("#deadline-reminder-dismiss");
 const connectedSourcesList = document.querySelector("#connected-sources-list");
+const connectedSourcesToggle = document.querySelector("#connected-sources-toggle");
 const queue = document.querySelector("#queue");
 const refreshQueueButton = document.querySelector("#refresh-queue");
 const studyForm = document.querySelector("#study-form");
@@ -19,6 +20,10 @@ const approvalTrigger = document.querySelector("#approval-trigger");
 const pendingCount = document.querySelector("#pending-count");
 const approvalLayer = document.querySelector("#approval-layer");
 const approvalDrawer = document.querySelector("#approval-drawer");
+const detailLayer = document.querySelector("#detail-layer");
+const detailDialog = document.querySelector("#detail-dialog");
+const detailContent = document.querySelector("#detail-content");
+const detailClose = document.querySelector("#detail-close");
 const assignmentForm = document.querySelector("#assignment-form");
 const assignmentPrompt = document.querySelector("#assignment-prompt");
 const assignmentError = document.querySelector("#assignment-error");
@@ -31,6 +36,7 @@ const loginPassword = document.querySelector("#login-password");
 const loginError = document.querySelector("#login-error");
 const appShell = document.querySelector("#app-shell");
 const railNodes = document.querySelectorAll(".rail-node");
+const railToggle = document.querySelector(".rail-toggle");
 const appSections = document.querySelectorAll(".app-section");
 const panelScroller = document.querySelector(".panel-scroller");
 const previousPanelButton = document.querySelector("#previous-panel");
@@ -43,6 +49,12 @@ const closeSettingsButton = document.querySelector("#close-settings");
 const deadlineRemindersSetting = document.querySelector("#deadline-reminders-setting");
 const reducedMotionSetting = document.querySelector("#reduced-motion-setting");
 let wheelNavigationLocked = false;
+let activePanelIndex = 0;
+let requestedPanelIndex = null;
+let panelSettleTimer = null;
+let detailReturnFocus = null;
+let queueItemsById = new Map();
+let studyTopics = [];
 let authToken = localStorage.getItem("triage-demo-token");
 let drawerTrigger = null;
 let deadlineReminderDismissed = false;
@@ -258,6 +270,11 @@ document.querySelectorAll("[data-scroll-to]").forEach((button) => {
   button.addEventListener("click", () => scrollLandingTo(button.dataset.scrollTo));
 });
 backToLandingButton.addEventListener("click", showLandingScreen);
+connectedSourcesToggle.addEventListener("click", () => {
+  const isOpen = connectedSourcesToggle.getAttribute("aria-expanded") === "true";
+  connectedSourcesToggle.setAttribute("aria-expanded", String(!isOpen));
+  connectedSourcesList.hidden = isOpen;
+});
 
 settingsFab.addEventListener("click", () => {
   const open = !settingsMenu.classList.contains("is-open");
@@ -316,16 +333,7 @@ panelScroller.addEventListener("wheel", (event) => {
 
   event.preventDefault();
   if (wheelNavigationLocked) return;
-
-  const activeIndex = [...railNodes].findIndex((railNode) => railNode.classList.contains("is-active"));
-  const nextIndex = activeIndex + (event.deltaY > 0 ? 1 : -1);
-  if (nextIndex < 0 || nextIndex >= railNodes.length) return;
-
-  wheelNavigationLocked = true;
-  scrollToSection(railNodes[nextIndex].dataset.section);
-  window.setTimeout(() => {
-    wheelNavigationLocked = false;
-  }, 350);
+  moveBetweenPanels(event.deltaY > 0 ? 1 : -1);
 }, { passive: false, capture: true });
 
 railNodes.forEach((railNode) => {
@@ -333,24 +341,23 @@ railNodes.forEach((railNode) => {
 });
 
 function moveBetweenPanels(direction) {
-  const activeIndex = [...railNodes].findIndex((railNode) => railNode.classList.contains("is-active"));
-  const nextIndex = activeIndex + direction;
+  const nextIndex = activePanelIndex + direction;
   if (nextIndex < 0 || nextIndex >= railNodes.length) return;
-  scrollToSection(railNodes[nextIndex].dataset.section);
+  navigateToPanel(nextIndex);
 }
 
 previousPanelButton.addEventListener("click", () => moveBetweenPanels(-1));
 nextPanelButton.addEventListener("click", () => moveBetweenPanels(1));
 
 function scrollToSection(sectionName) {
-  const section = document.querySelector(`#${sectionName}-section`);
-  if (!section) return;
-  const centeredLeft = Math.max(0, section.offsetLeft - (panelScroller.clientWidth - section.clientWidth) / 2);
-  panelScroller.scrollTo({ left: centeredLeft, behavior: "smooth" });
-  setActiveRailNode(sectionName);
+  const index = [...railNodes].findIndex((railNode) => railNode.dataset.section === sectionName);
+  if (index >= 0) navigateToPanel(index);
 }
 
-function setActiveRailNode(sectionName) {
+function setActiveRailNode(index) {
+  const sectionName = railNodes[index]?.dataset.section;
+  if (!sectionName) return;
+  activePanelIndex = index;
   railNodes.forEach((railNode) => {
     const isActive = railNode.dataset.section === sectionName;
     railNode.classList.toggle("is-active", isActive);
@@ -360,29 +367,55 @@ function setActiveRailNode(sectionName) {
       railNode.removeAttribute("aria-current");
     }
   });
-  const activeIndex = [...railNodes].findIndex((railNode) => railNode.dataset.section === sectionName);
-  previousPanelButton.hidden = activeIndex <= 0;
-  nextPanelButton.hidden = activeIndex === railNodes.length - 1;
+  railToggle.style.setProperty("--active-index", String(index));
+  previousPanelButton.hidden = index <= 0;
+  nextPanelButton.hidden = index === railNodes.length - 1;
+}
+
+function getClosestPanelIndex() {
+  const viewportCenter = panelScroller.scrollLeft + panelScroller.clientWidth / 2;
+  let closestIndex = 0;
+  let minDistance = Infinity;
+  appSections.forEach((section, index) => {
+    const sectionCenter = section.offsetLeft + section.clientWidth / 2;
+    const distance = Math.abs(sectionCenter - viewportCenter);
+    if (distance < minDistance) {
+      minDistance = distance;
+      closestIndex = index;
+    }
+  });
+  return closestIndex;
+}
+
+function settlePanelNavigation() {
+  window.clearTimeout(panelSettleTimer);
+  panelSettleTimer = null;
+  requestedPanelIndex = null;
+  wheelNavigationLocked = false;
+  setActiveRailNode(getClosestPanelIndex());
+}
+
+function schedulePanelSettle() {
+  window.clearTimeout(panelSettleTimer);
+  panelSettleTimer = window.setTimeout(settlePanelNavigation, 120);
+}
+
+function navigateToPanel(index) {
+  const section = appSections[index];
+  if (!section || requestedPanelIndex === index) return;
+  requestedPanelIndex = index;
+  wheelNavigationLocked = true;
+  setActiveRailNode(index);
+  const centeredLeft = Math.max(0, section.offsetLeft - (panelScroller.clientWidth - section.clientWidth) / 2);
+  panelScroller.scrollTo({ left: centeredLeft, behavior: "smooth" });
+  window.clearTimeout(panelSettleTimer);
+  panelSettleTimer = window.setTimeout(settlePanelNavigation, 700);
 }
 
 panelScroller.addEventListener("scroll", () => {
-  const scrollLeft = panelScroller.scrollLeft;
-  let closestSection = null;
-  let minDistance = Infinity;
-
-  appSections.forEach((section) => {
-    const distance = Math.abs(section.offsetLeft - scrollLeft);
-    if (distance < minDistance) {
-      minDistance = distance;
-      closestSection = section;
-    }
-  });
-
-  if (closestSection) {
-    const sectionName = closestSection.id.replace("-section", "");
-    setActiveRailNode(sectionName);
-  }
+  if (requestedPanelIndex === null) schedulePanelSettle();
 });
+panelScroller.addEventListener("scrollend", settlePanelNavigation);
 
 document.addEventListener("keydown", (event) => {
   if (
@@ -634,10 +667,11 @@ async function loadQueue() {
       return;
     }
 
+    queueItemsById = new Map(Object.values(groups).flat().map((item) => [String(item.id), item]));
     queue.innerHTML = Object.entries(groups).map(([name, items]) => `
       <section class="queue-group">
         <h3>${name} <span>${items.length}</span></h3>
-        ${items.length ? items.map(queueItem).join("") : "<p class=\"muted\">Nothing here.</p>"}
+        <div class="queue-card-grid">${items.length ? items.map((item) => queueItem(item, name)).join("") : "<p class=\"muted\">Nothing here.</p>"}</div>
       </section>
     `).join("");
   } catch (requestError) {
@@ -709,18 +743,19 @@ deadlineReminderDismiss.addEventListener("click", () => {
   deadlineReminder.hidden = true;
 });
 
-function queueItem(item) {
-  const summary = item.text.length > 150 ? `${item.text.slice(0, 150)}...` : item.text;
+function queueItem(item, groupName) {
+  const summary = item.text.length > 96 ? `${item.text.slice(0, 96)}...` : item.text;
   const mandatory = item.mandatory === true ? "Mandatory" : item.mandatory === false ? "Optional" : "Requirement unclear";
   const deadline = item.deadline || "No explicit deadline";
   const deadlineClass = isDeadlineWithin24Hours(item.deadline) ? " deadline-soon" : "";
   return `
-    <article class="queue-item" data-item-id="${item.id}">
-      <p class="summary">${escapeHtml(summary)}</p>
-      <p class="muted">${escapeHtml(item.reason)}</p>
-      <p class="metadata"><span class="deadline${deadlineClass}">${escapeHtml(deadline)}</span><span class="mandatory ${item.mandatory === true ? "is-mandatory" : "is-optional"}">${mandatory}</span>${item.source === "whatsapp-demo" ? '<span class="simulated-tag">Simulated</span>' : ""}</p>
-      ${archiveDownloadLink(item.archived_path)}
-      <button class="done-button" type="button" data-item-id="${item.id}">Mark done</button>
+    <article class="queue-item queue-card" data-item-id="${item.id}">
+      <button class="queue-card-trigger" type="button" data-open-queue-item="${item.id}" aria-label="Open ${escapeHtml(summary)}">
+        <span class="queue-card-topline"><span class="queue-card-group">${escapeHtml(groupName)}</span><span class="mandatory ${item.mandatory === true ? "is-mandatory" : "is-optional"}">${mandatory}</span></span>
+        <span class="summary">${escapeHtml(summary)}</span>
+        <span class="metadata"><span class="deadline${deadlineClass}">${escapeHtml(deadline)}</span>${item.source === "whatsapp-demo" ? '<span class="simulated-tag">Simulated</span>' : ""}</span>
+        <span class="queue-card-open" aria-hidden="true">Open →</span>
+      </button>
     </article>
   `;
 }
@@ -753,22 +788,82 @@ document.addEventListener("click", async (event) => {
   }
 });
 
-queue.addEventListener("click", async (event) => {
-  const doneButton = event.target.closest(".done-button");
-  if (!doneButton) return;
-
+async function markQueueItemDone(doneButton) {
   doneButton.disabled = true;
   try {
     const response = await apiFetch(apiUrl(`/queue/${doneButton.dataset.itemId}/done`), { method: "POST" });
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || "Could not update this item.");
     await loadPendingActions(data.id);
-    openApprovalDrawer(doneButton);
+    const approvalOrigin = detailReturnFocus || doneButton;
+    closeDetailDialog(false);
+    openApprovalDrawer(approvalOrigin);
     loadQueue();
   } catch (requestError) {
     error.textContent = requestError.message;
     doneButton.disabled = false;
   }
+}
+
+queue.addEventListener("click", async (event) => {
+  const trigger = event.target.closest("[data-open-queue-item]");
+  if (!trigger) return;
+  const item = queueItemsById.get(trigger.dataset.openQueueItem);
+  if (item) openQueueDetail(item, trigger);
+});
+
+function openDetailDialog(content, trigger) {
+  detailReturnFocus = trigger;
+  detailContent.innerHTML = content;
+  detailLayer.classList.add("is-open");
+  detailLayer.setAttribute("aria-hidden", "false");
+  detailClose.focus();
+}
+
+function closeDetailDialog(returnFocus = true) {
+  if (!detailLayer.classList.contains("is-open")) return;
+  detailLayer.classList.remove("is-open");
+  detailLayer.setAttribute("aria-hidden", "true");
+  if (returnFocus) detailReturnFocus?.focus();
+  detailReturnFocus = null;
+}
+
+function openQueueDetail(item, trigger) {
+  const mandatory = item.mandatory === true ? "Mandatory" : item.mandatory === false ? "Optional" : "Requirement unclear";
+  const deadline = item.deadline || "No explicit deadline";
+  const deadlineClass = isDeadlineWithin24Hours(item.deadline) ? " deadline-soon" : "";
+  openDetailDialog(`
+    <p class="eyebrow">ACTION QUEUE</p>
+    <h2 id="detail-title">${escapeHtml(item.text)}</h2>
+    <p class="detail-reason">${escapeHtml(item.reason)}</p>
+    <div class="detail-facts"><div><span>Deadline</span><strong class="deadline${deadlineClass}">${escapeHtml(deadline)}</strong></div><div><span>Requirement</span><strong>${mandatory}</strong></div></div>
+    <div class="detail-actions"><button class="done-button" type="button" data-item-id="${item.id}">Mark done for review</button>${archiveDownloadLink(item.archived_path)}</div>
+  `, trigger);
+}
+
+function openStudyDetail(item, trigger) {
+  openDetailDialog(`
+    <p class="eyebrow">STUDY PLAN</p>
+    <h2 id="detail-title">${escapeHtml(item.topic)}</h2>
+    <p class="detail-reason">Prioritized at <strong class="weight">${item.weight}/10</strong> from the uploaded material.</p>
+    <div class="detail-weight"><span style="width: ${item.weight * 10}%; --weight: ${item.weight}"></span></div>
+    <h3 class="detail-subtopics-title">Focus areas</h3>
+    <ul class="detail-subtopics">${item.subtopics.map((subtopic) => `<li>${escapeHtml(subtopic)}</li>`).join("")}</ul>
+    <div class="study-archive-links detail-archive-links">${archiveDownloadLink(item.question_bank_archived_path, "Download question bank")}${archiveDownloadLink(item.unit_notes_archived_path, "Download unit notes")}</div>
+  `, trigger);
+}
+
+detailClose.addEventListener("click", () => closeDetailDialog());
+detailLayer.addEventListener("click", async (event) => {
+  if (event.target.closest("[data-close-detail]")) {
+    closeDetailDialog();
+    return;
+  }
+  const doneButton = event.target.closest(".done-button");
+  if (doneButton) await markQueueItemDone(doneButton);
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && detailLayer.classList.contains("is-open")) closeDetailDialog();
 });
 
 function escapeHtml(value) {
@@ -869,21 +964,29 @@ async function loadStudyPlan() {
 
 function renderStudyPlan(topics) {
   if (!topics.length) {
+    studyTopics = [];
     studyPlan.innerHTML = "<p class=\"empty-state\">Upload a question bank to get started.</p>";
     return;
   }
-  studyPlan.innerHTML = topics.map((item) => `
-    <details class="study-topic">
-      <summary>
-        <span>${escapeHtml(item.topic)}</span>
-        <span class="weight">${item.weight}/10</span>
-      </summary>
-      <div class="weight-track"><span style="width: ${item.weight * 10}%; --weight: ${item.weight}"></span></div>
-      <ul>${item.subtopics.map((subtopic) => `<li>${escapeHtml(subtopic)}</li>`).join("")}</ul>
-      <div class="study-archive-links">${archiveDownloadLink(item.question_bank_archived_path, "Download question bank")}${archiveDownloadLink(item.unit_notes_archived_path, "Download unit notes")}</div>
-    </details>
-  `).join("");
+  studyTopics = topics;
+  studyPlan.innerHTML = `<div class="study-card-grid">${topics.map((item, index) => `
+    <article class="study-topic study-card">
+      <button class="study-card-trigger" type="button" data-open-study-topic="${index}" aria-label="Open ${escapeHtml(item.topic)}">
+        <span class="study-card-topline"><span class="weight">${item.weight}/10</span><span>Priority</span></span>
+        <span class="study-card-title">${escapeHtml(item.topic)}</span>
+        <span class="weight-track"><span style="width: ${item.weight * 10}%; --weight: ${item.weight}"></span></span>
+        <span class="study-card-open" aria-hidden="true">View outline →</span>
+      </button>
+    </article>
+  `).join("")}</div>`;
 }
+
+studyPlan.addEventListener("click", (event) => {
+  const trigger = event.target.closest("[data-open-study-topic]");
+  if (!trigger) return;
+  const item = studyTopics[Number(trigger.dataset.openStudyTopic)];
+  if (item) openStudyDetail(item, trigger);
+});
 
 async function loadPendingActions(highlightedActionId = null) {
   try {
