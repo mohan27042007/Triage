@@ -1,192 +1,89 @@
-Commit prepared documentation for the local-first Triage classification core.
+# Triage — Project Overview
 
----
+## One-line pitch
 
-# Triage - Local-First Classification Core
+Triage is a review-first AI student desk that turns scattered college communication into an Action Queue, a ranked Study Plan, and clear human decisions.
 
-## Project Overview
+## The problem
 
-Triage is a student inbox assistant built as a local-first prototype to classify WhatsApp, email, and other text communications into three categories:
+Students receive important academic information across Gmail, Google Classroom, WhatsApp groups, files, and informal notices. Some messages demand immediate action—registration deadlines, attendance forms, completion polls, lab records, and project checkpoints—while others are useful only for study or are simply noise. The cost is not just inbox overload; it is missed obligations and time spent manually deciding what matters.
 
-- **Obligation**: Tasks requiring student action (deadlines, registration, forms)
-- **Study Material**: Academic content for learning/assessment (notes, questions)
-- **Noise**: Irrelevant content, casual chat, promotional messages
+Question banks and unit notes create a related problem. Students often have to manually compare material to infer which topics recur and are most worth revising. Assignment prompts can be equally ambiguous, but giving students a finished answer would undermine learning.
 
-## Technical Architecture
+## The solution
 
-### Backend (Python 3.13)
-- **Framework**: FastAPI 0.115.0
-- **Server**: Uvicorn with hot reload
-- **API Key**: OpenAI API integration via python-dotenv
-- **Classifier**: GPT-5.6 with JSON schema validation
-- **Endpoints**:
-  - `GET /health` - Health check
-  - `POST /ingest` - Text ingestion and classification
-    - JSON body: `{"text": "message text"}`
-    - Form upload: UTF-8 `.txt` file via `file` field
+Triage triages incoming academic information into three structured categories:
 
-### Frontend (Vanilla JavaScript)
-- **Framework**: Plain HTML + CSS + JS (no React yet)
-- **Server**: Python HTTP server (port 3000)
-- **Features**:
-  - Text paste area
-  - File upload (.txt only, UTF-8 encoded)
-  - Real-time classification
-  - Categorized results with badges and details
+- **Obligation**: deadlines, forms, registrations, notices, and polls.
+- **Study Material**: question banks, unit notes, and assessment preparation.
+- **Noise**: messages that do not need action or study time.
 
-### Classifier Integration
-- **Model**: GPT-5.6
-- **Format**: Structured JSON response with:
-  - `category`: One of {"Obligation", "Study Material", "Noise"}
-  - `reason`: Evidence-based classification explanation
-  - `deadline`: Optional explicit deadline string
-  - `mandatory`: Boolean/nulp for required/optional
+Obligations are grouped into **Immediate**, **This Week**, and **Later**, with explicit deadlines and requirement status. Study material becomes a ranked outline generated from question-bank and unit-note text. Assignment help is deliberately limited to requirements, concepts, approach steps, and test cases.
 
-## Setup & Run
+The key safety mechanism is Human Review. Triage can draft a copy-only response for a completion poll or routine form, but it does not send it, submit a form, or invent a student's personal details. The student can edit and copy the draft themselves; approving an action only updates Triage's local record.
 
-### Prerequisites
-- Python 3.13+
-- pip (available via py launcher on Windows)
+## Current implementation
 
-### Backend Setup
+### Ingestion and classification
 
-1. Open terminal in project root:
-   ```cmd
-   cd backend
-   ```
+- Manual text paste and UTF-8 `.txt` uploads.
+- Read-only Gmail and Google Classroom sync in the local OAuth setup.
+- Clearly marked representative WhatsApp demo data, not a live WhatsApp connection.
+- OpenAI structured-output classification with category, reason, deadline, mandatory status, and poll/form detection.
+- SQLite persistence, source IDs for deduplication, and local archive downloads for uploaded text files.
 
-2. Create virtual environment:
-   ```powershell
-   py -m venv .venv
-   .\.venv\Scripts\Activate.ps1
-   ```
+### Student desk
 
-3. Install dependencies and create .env:
-   ```powershell
-   pip install -r requirements.txt
-   Copy-Item .env.example .env
-   ```
+- Action Queue with urgency grouping, compact cards, detail dialogs, deadline reminders, and local mark-done requests.
+- Approval Drawer with editable poll/form response drafts and explicit no-send language.
+- Ranked Study Plan with expandable topic outlines.
+- Assignment Scaffolding with requirements, concepts, approach, and test cases—never a complete submission.
+- Shared demo-password gate, keyboard/arrow navigation, a pulse-inspired rail, theme selection, and reduced-motion support.
 
-4. Configure API key in `backend/.env`:
-   ```dotenv
-   OPENAI_API_KEY=your_actual_openai_api_key_here
-   ```
+### Deployment
 
-5. Start the FastAPI server:
-   ```powershell
-   uvicorn main:app --reload
-   ```
+- Frontend: [Vercel](https://triage-27.vercel.app)
+- Backend: [Railway](https://triage-production-b91f.up.railway.app/health)
+- Local mode remains the supported place for Google OAuth source connections.
 
-   Server will be available at `http://localhost:8000`
+## Technical architecture
 
-### Frontend Setup
+| Concern | Implementation |
+| --- | --- |
+| Frontend | Vanilla HTML, CSS, and JavaScript |
+| Backend | Python, FastAPI, Uvicorn |
+| AI workflows | OpenAI Responses API with `gpt-5.6-luna` and JSON schemas |
+| Storage | SQLite for the local/demo workflow |
+| Google integrations | Gmail API + Google Classroom API using read-only OAuth |
+| Hosting | Vercel frontend + Railway backend |
 
-6. Open new terminal:
-   ```cmd
-   cd frontend
-   ```
+## Why Codex
 
-7. Start static server:
-   ```powershell
-   py -m http.server 3000
-   ```
+Codex was the primary engineering collaborator for this solo build. It helped translate the product direction into concrete backend routes, data models, AI schemas, UI behaviors, deployment configuration, debugging, smoke tests, and iterative visual refinements. The product itself uses OpenAI model-backed structured workflows; Codex was also integral to building and validating the surrounding application that makes those workflows safe and usable.
 
-   Frontend available at `http://localhost:3000`
+## Important constraints
 
-### Testing
+- No WhatsApp, email, form, or external submission capability exists.
+- WhatsApp data in the demo is simulated and labelled as such.
+- Google source sync is read-only and presently designed for local OAuth, not hosted per-user accounts.
+- SQLite, local archives, and in-memory sessions make the current deployment a demo environment rather than durable production infrastructure.
+- Triage does not generate final academic submissions.
 
-Test with provided samples:
+## Next steps
 
-**Obligation Sample**:
-```text
-All students must complete the Build Week registration form by Friday, July 17 at 5 PM. Attendance will be verified.
-```
+1. Add per-user hosted Google OAuth and durable account/session storage.
+2. Move from SQLite/local archives to managed storage and object storage.
+3. Add robust connection health, retry states, source search, and archive/history views.
+4. Extend attachment handling beyond UTF-8 text uploads.
+5. Investigate a reliable, policy-compliant WhatsApp integration without compromising the stable demo path.
+6. Add user-provided profile fields for routine-form drafts, always reviewable and never auto-submitted.
 
-**Study Material Sample**:
-```text
-Unit 3 question bank: Explain the difference between supervised and unsupervised learning. Compare both approaches with one example each.
-```
+## Demo path
 
-## Architecture Notes
+1. Paste a realistic student notice into Stream / Ingest.
+2. Show structured classification and the Action Queue.
+3. Open the DBMS completion-poll item.
+4. Open Human Review and show the editable `Suggested reply: YES, completed` draft.
+5. Show ranked Study Plan topics and an Assignment Scaffold.
 
-- **Local-first**: All text input processed locally, no external accounts or OAuth
-- **No external integrations**: Deliberately excludes Gmail, ClassRoom, WhatsApp, Pulse Rail components
-- **Functional-only slice**: Focuses on core classification loop proof-of-concept
-- **Minimal styling**: Plain design to validate classification logic
-- **Schema validation**: Strict JSON validation for consistent responses
-
-## File Structure
-
-```
-Triage/
-├── backend/
-│   ├── main.py           # FastAPI API server
-│   ├── classifier.py     # Classification logic
-│   ├── requirements.txt  # Python dependencies
-│   ├── .env.example      # API key template
-│   └── .env             # OpenAI API key (gitignored)
-├── frontend/
-│   ├── index.html       # Main UI
-│   ├── styles.css       # Styling
-│   └── app.js           # Client logic
-├── README.md            # Project documentation
-└── .gitignore          # Ignore patterns
-```
-
-## Documentation Links
-
-- **Interactive API docs**: http://localhost:8000/docs
-- **Health check**: http://localhost:8000/health
-
-## Code Quality
-
-- **Type checking**: mypy with strict mode enabled
-- **Formatting**: Black (PEP-8 compliant)
-- **Linting**: flake8 (79-char line limit)
-- **Syntax validation**: Python compile checks
-- **Error handling**: Structured HTTPException responses
-
-## Deployment Considerations
-
-- **Environment**: Intended for local development and testing
-- **Security**: API key stored in .env (never committed)
-- **CORS**: Configured for localhost origins only
-- **Input validation**: Strict type and format checks
-- **Error reporting**: Clear user-friendly error messages
-
-## Future Work
-
-- Gmail integration for reading emails
-- ClassRoom WhatsApp notifications
-- Pulse Rail design system implementation
-- User approval workflow for actions
-- Automated action execution
-- Advanced classification features
-- Dashboard and analytics
-
-## Testing Strategy
-
-1. **Manual smoke tests**: Core classification features
-2. **End-to-end validation**: Real user scenarios
-3. **API validation**: Type and schema checks
-4. **Error handling**: Invalid input scenarios
-5. **Performance testing**: Large file uploads
-6. **Integration testing**: Backend-frontend communication
-
-## Testing the Implementation
-
-Once the server is running, test end-to-end with:
-
-1. **Obligation message**:
-   - Submit: "All students must complete the Build Week registration form by Friday, July 17 at 5 PM. Attendance will be verified."
-   - Expected result: Category: "Obligation", with deadline field populated
-
-2. **Study Material sample**:
-   - Submit: "Unit 3 question bank: Explain the difference between supervised and unsupervised learning. Compare both approaches with one example each."
-   - Expected result: Category: "Study Material", with detailed reason
-
-3. **Noise test**:
-   - Submit: "Hello everyone! Hope you're having a great day. Just wanted to say hi!"
-   - Expected result: Category: "Noise" (no deadline or mandatory fields)
-
-The system should correctly classify all three message types with appropriate details.
+This demonstrates Triage's core principle: organize attention, draft the next step, and leave the real-world decision with the student.

@@ -1,166 +1,170 @@
 # Triage
-Triage uses Codex to sort scattered WhatsApp, email, and Classroom chaos into a clear Action Queue and a ranked Study Plan — you approve every action, it never decides alone.
 
-## Local-first classification core
+> Sort what college sends into action, study, and calm—without sending or submitting anything for the student.
 
-This local-first slice accepts pasted text or a UTF-8 `.txt` file and classifies it with GPT-5.6 Luna as an **Obligation**, **Study Material**, or **Noise** item. Every result is persisted locally in SQLite. Open obligations appear in an Action Queue, where they can be marked done.
+Triage is a local-first AI student desk for scattered academic communication. It classifies incoming text as an **Obligation**, **Study Material**, or **Noise** item; turns obligations into a deadline-aware Action Queue; builds ranked study outlines from question-bank and unit-note text; and keeps every change behind explicit human review.
 
-### WhatsApp demo data, not a live integration
+**Live demo:** [triage-27.vercel.app](https://triage-27.vercel.app) · **Backend health check:** [Railway API](https://triage-production-b91f.up.railway.app/health)
 
-Triage does not connect to WhatsApp. The **Load WhatsApp Demo Data** control classifies a small set of clearly labeled, representative college-group messages and marks resulting queue items as **Simulated**. This demonstrates the WhatsApp use case without relying on an unofficial WhatsApp API, consistent with the hackathon's third-party authorization requirements.
+## What is implemented
 
-## How Codex was used
+- Paste text or upload UTF-8 `.txt` files for classification.
+- Structured OpenAI classification with category, evidence-based reason, explicit deadline, mandatory/optional status, and poll/form detection.
+- Action Queue grouped into **Immediate**, **This Week**, and **Later**.
+- Detail dialogs and a review-first **Mark done** workflow.
+- Approval Drawer with editable copy-only drafts for completion polls and routine forms. Approving changes only the local Triage item; it never sends a WhatsApp message or posts a form.
+- Study Plan that ranks topics from a question bank and unit notes, with topic outlines rather than generated answers.
+- Assignment Scaffolding that returns requirements, concepts, an approach, and test cases—not a submittable solution.
+- Local, read-only Gmail and Google Classroom sync after Google OAuth setup.
+- Clearly labelled representative WhatsApp demo data; there is no live WhatsApp integration.
+- Local archiving and authenticated download of uploaded `.txt` files.
+- Shared demo-password gate, in-memory sessions, deadline reminders, keyboard/pulse-rail navigation, theme controls, and reduced-motion support.
 
-The project owner set the product direction and made the key product, engineering, and design decisions: a local-first student desk, a human approval layer before changes, the Pulse Rail/glass-panel interface, authorized Google read-only sources, and a simulated WhatsApp path instead of an unofficial live integration. Codex accelerated the implementation and iteration of that direction: the commit history records the scaffold and local classification core, persistent Action Queue, Study Plan, approval workflow, design-system passes, assignment scaffolding, attachment archiving, Google ingestion, deadline reminders, simulated WhatsApp data, and deployment configuration.
+## Product boundaries
 
-The configured GPT-5.6 model (`gpt-5.6-luna`) is part of the product itself, not just the development process. It classifies incoming text into Obligation, Study Material, or Noise with structured fields; ranks topics and produces study-plan outlines from a question bank and notes; and creates planning-only Assignment Scaffolds with requirements, concepts, approach steps, and test cases. Codex helped connect those model-backed workflows to the FastAPI, SQLite, and vanilla-JavaScript product surface, while the owner retained decision-making over what the product should do and which integrations were appropriate.
+Triage is intentionally review-first:
 
-## Running locally
+- It does **not** submit forms, send WhatsApp messages, post replies, or make external changes.
+- It does **not** invent personal details for form fields.
+- It does **not** produce complete academic submissions. Assignment help is planning and self-checking support only.
+- Gmail and Classroom access is read-only and is currently supported through the local OAuth workflow.
 
-### Backend
+## Stack
 
-1. Open a terminal in `backend`.
-2. Create and activate a virtual environment:
+| Layer | Current implementation |
+| --- | --- |
+| Frontend | Vanilla HTML, CSS, and JavaScript |
+| Backend | Python + FastAPI + Uvicorn |
+| AI | OpenAI Responses API using `gpt-5.6-luna` structured JSON outputs |
+| Local persistence | SQLite |
+| Google sources | Gmail API and Google Classroom API via read-only OAuth |
+| Hosting | Vercel frontend + Railway FastAPI backend |
 
-   ```powershell
-   py -m venv .venv
-   .\.venv\Scripts\Activate.ps1
-   ```
+## Run locally
 
-3. Install dependencies and configure your API key:
+### 1. Configure the backend
 
-   ```powershell
-   pip install -r requirements.txt
-   Copy-Item .env.example .env
-   ```
+From the repository root:
 
-4. Edit `.env`, replace `your_openai_api_key_here` with your OpenAI API key, and set `DEMO_PASSWORD` to the single shared password for this demo. Never commit this file.
-5. Start the API:
+```powershell
+cd backend
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+Copy-Item .env.example .env
+```
 
-   ```powershell
-   uvicorn main:app --reload
-   ```
+Set these values in `backend/.env`:
 
-The API will run at `http://localhost:8000`; visit `http://localhost:8000/docs` for the interactive endpoint documentation.
+```dotenv
+OPENAI_API_KEY=your_openai_api_key
+DEMO_PASSWORD=a_shared_demo_password
+```
 
-### API endpoints
+Start the API:
 
-- `POST /ingest` — accepts JSON (`{"text":"..."}`) or a multipart UTF-8 `.txt` upload (`file`); classifies and stores the item.
-- `POST /sources/gmail/sync` — imports and classifies up to 15 new Gmail inbox messages after Google authorization.
-- `POST /sources/classroom/sync` — imports and classifies recent announcements and coursework from active Google Classroom courses.
-- `POST /sources/whatsapp/demo-load` — classifies and persists the representative simulated WhatsApp messages once; it is not a live WhatsApp integration.
-- `GET /archive/{filename}` — downloads an authenticated locally archived upload.
-- `GET /queue` — returns open obligations grouped as `Immediate`, `This Week`, and `Later`.
-- `POST /queue/{id}/done` — creates a pending request to mark an open obligation done; it does not change the item yet.
-- `GET /pending` — lists human-review actions awaiting a decision.
-- `POST /pending/{id}/approve` — applies an approved pending action (currently `mark_done`).
-- `POST /pending/{id}/reject` — rejects a pending action without applying it.
-- `POST /study/upload` — accepts UTF-8 `.txt` files named `question_bank` and `unit_notes`, then builds and persists a ranked study plan.
-- `GET /study/plan` — returns the latest persisted study topic list, ordered by weight.
-- `POST /assignment/help` — accepts JSON (`{"prompt":"..."}`), returns a planning-only assignment scaffold, and stores it locally.
-- `GET /assignment/history` — returns saved assignment scaffolds, newest first.
-- `GET /health` — confirms the API is running.
+```powershell
+uvicorn main:app --reload
+```
 
-### Frontend
+The API runs at `http://localhost:8000` and exposes interactive documentation at `http://localhost:8000/docs`.
 
-In a second terminal, serve the `frontend` folder:
+### 2. Serve the frontend
+
+In a second terminal:
 
 ```powershell
 cd frontend
 py -m http.server 3000
 ```
 
-Open `http://localhost:3000` in your browser. Paste text or upload a UTF-8 `.txt` file, then select **Classify with Triage**.
+Open `http://localhost:3000`, then sign in with the shared `DEMO_PASSWORD`.
 
-### Demo access gate
+### 3. Load the local video-demo data (optional)
 
-Triage uses one shared `DEMO_PASSWORD` from `backend/.env`. Enter that password on the frontend login screen to receive an in-memory session token; restarting the backend invalidates all existing sessions. This is deliberately a single-user demo gate, not a real account system: it has no signup, password reset, password hashing infrastructure, multi-user support, or durable sessions.
-
-### Attachment archive
-
-Original `.txt` files submitted through Ingest and Study Plan uploads are retained locally in `backend/archive/` under collision-resistant filenames. This folder is user data and is intentionally ignored by Git; download links in the queue and study topics retrieve the archived originals.
-
-### Google authorization and Gmail sync
-
-`backend/credentials.json` must contain a Google Cloud **Desktop app** OAuth client (it is intentionally ignored by Git). Install the backend requirements, then run this once from the backend directory:
+The seed script is additive and idempotent: it creates five clearly simulated obligation cards, one poll-response draft in Human Review, and one assignment-scaffold example. It does not delete or reset existing data.
 
 ```powershell
-python setup_google_auth.py
+cd backend
+.\.venv\Scripts\python.exe seed_demo_video_data.py
 ```
 
-The script opens a browser for read-only Gmail and Classroom consent. It saves the refreshable local credentials to `backend/token.json`, which is also ignored by Git. Some Google Workspace domains grant a narrower scope set; the setup script preserves the granted token so permitted integrations can still run. If you created a token before Classroom sync was added, run the setup script again to request the additional read-only coursework scope. Afterward, select **Sync Gmail** or **Sync Classroom** in Triage, or call their matching `/sources/.../sync` endpoint with the normal demo bearer token.
+## Google source setup (local only)
 
-## Deployment (Vercel + Railway)
+Create a Google Cloud **Desktop app** OAuth client and save it as `backend/credentials.json`. Then run:
 
-**Live URL:** Not deployed yet. After deployment, replace this line with `https://YOUR-TRIAGE.vercel.app`.
+```powershell
+cd backend
+.\.venv\Scripts\python.exe setup_google_auth.py
+```
 
-Triage is prepared for a Vercel frontend and a Railway backend. This is suitable for a demo, with important limitations: the backend currently uses SQLite and a local archive directory, so hosted data can be lost when Railway redeploys or restarts. The in-memory demo sessions also reset on every backend restart. Use a managed database and object storage before treating this as a durable production service.
+The browser consent flow writes the local refresh token to `backend/token.json`. Both files are ignored by Git. Return to Triage and use **Sync Gmail** or **Sync Classroom** from Connected Sources.
 
-Google Gmail and Classroom sync is **local-only in this deployment design**. `backend/token.json` and `backend/credentials.json` are intentionally ignored and are not transferred to Railway. Do not upload a desktop OAuth token as a hosted secret; the current OAuth flow is designed for a local browser callback. The hosted app will continue to work for manual ingestion, study plans, assignment scaffolds, and WhatsApp demo data, but Google-source sync will show the one-time setup guidance rather than work in the hosted environment.
+If the token was created before Classroom scopes were added, run the setup command again. Google Workspace domains may grant a narrower scope set; Triage keeps the granted token and uses whichever permitted integrations are available.
 
-### Deploy the backend to Railway
+## API overview
 
-1. Push this repository to a Git provider that both services can access. Create or sign in to Railway yourself, then choose **New Project → Deploy from GitHub repo**.
-2. Select this repository. In the Railway service settings, set the **Root Directory** to `backend`. Railway will read `backend/railway.toml`, install `requirements.txt`, run `uvicorn main:app --host 0.0.0.0 --port $PORT`, and check `/health`.
-3. In the Railway **Variables** tab, add:
+All endpoints except `GET /health` and `POST /auth/login` require the demo bearer token issued by login.
 
-   ```text
-   OPENAI_API_KEY=your_openai_api_key
-   DEMO_PASSWORD=a_long_shared_demo_password
-   CORS_ORIGINS=https://YOUR-TRIAGE.vercel.app
-   ```
+| Endpoint | Purpose |
+| --- | --- |
+| `POST /auth/login` | Exchanges the shared demo password for an in-memory token. |
+| `POST /ingest` | Classifies pasted JSON text or an uploaded UTF-8 `.txt` file. |
+| `GET /queue` | Returns open obligations grouped by urgency. |
+| `POST /queue/{id}/done` | Creates a pending mark-done review action. |
+| `GET /pending` | Lists actions awaiting Human Review. |
+| `POST /pending/{id}/approve` | Applies an approved local action. |
+| `POST /pending/{id}/reject` | Rejects a pending action without changing the item. |
+| `POST /sources/gmail/sync` | Imports newly seen Gmail inbox messages after local OAuth. |
+| `POST /sources/classroom/sync` | Imports Classroom announcements and coursework after local OAuth. |
+| `POST /sources/whatsapp/demo-load` | Loads representative, simulated WhatsApp messages once. |
+| `POST /study/upload` | Builds and stores a ranked study plan from two UTF-8 `.txt` files. |
+| `GET /study/plan` | Retrieves the latest stored study plan. |
+| `POST /assignment/help` | Creates and stores a planning-only assignment scaffold. |
+| `GET /assignment/history` | Retrieves saved assignment scaffolds. |
+| `GET /archive/{filename}` | Downloads one authenticated locally archived upload. |
 
-   Do not add `token.json`, `credentials.json`, or any local database/archive files.
-4. Deploy the service, then use Railway's **Generate Domain** action. Confirm `https://YOUR-RAILWAY-SERVICE.up.railway.app/health` returns `{"status":"ok"}`.
+## Deployment notes
 
-### Deploy the frontend to Vercel
-
-1. Create or sign in to Vercel yourself, choose **Add New → Project**, and import the same repository.
-2. Keep the project root at the repository root so Vercel can serve `api/config.js`; set the **Output Directory** to `frontend` (the committed `vercel.json` supplies this value).
-3. In Vercel **Settings → Environment Variables**, add the public, non-secret value below for Production (and Preview if you want preview deployments to work):
-
-   ```text
-   TRIAGE_API_BASE_URL=https://YOUR-RAILWAY-SERVICE.up.railway.app
-   ```
-
-   The Vercel `api/config.js` function exposes only this public URL to the browser. Never put `OPENAI_API_KEY` or `DEMO_PASSWORD` in Vercel.
-4. Deploy. Copy the resulting `https://YOUR-TRIAGE.vercel.app` URL into Railway's `CORS_ORIGINS` variable, redeploy Railway, then reload Vercel.
-5. Smoke-test the deployed site: log in, ingest a manual message, load WhatsApp demo data, and verify the Action Queue. If Google-source cards are used, expect the documented local-only setup guidance.
-
-If hosted deployment is not practical for the demo, a recorded local run remains a valid fallback: it demonstrates the complete supported local workflow without claiming that the local Google OAuth setup works in a hosted environment.
-
-### Queue smoke test
-
-1. Start the backend and frontend as above.
-2. Submit the obligation example below. It should appear in **Immediate** or **This Week**, depending on the current date and extracted deadline.
-3. Select **Mark done**. The item should remain in the queue and appear under **Human Review**.
-4. Approve it. The item should then disappear from the queue; rejecting it leaves the item open.
-5. Submit the study-material example. It should classify correctly but should not appear in the Action Queue.
-
-### Study Plan smoke test
-
-1. Create a small `question_bank.txt` with several questions that repeat a few topics, plus matching `unit_notes.txt`.
-2. In the Study Plan section, upload both files and select **Build study plan**.
-3. Confirm the result shows ranked topics, a 1–10 weight, and an expandable outline for each topic.
-4. Restart the API and refresh the page; the latest study plan should still appear.
-
-### Assignment Scaffolding
-
-Paste an assignment prompt into the **Assignment Scaffold** panel and select **Build scaffold**. Triage returns requirements, concepts, a planning/pseudocode-level approach, and test cases—never a complete solution or full written answer. Previous scaffolds remain available in the panel after a restart.
-
-### Manual smoke-test messages
-
-**Obligation**
+The Vercel/Railway deployment is suitable for a shared demo. Set the Railway variables below:
 
 ```text
-All students must complete the Build Week registration form by Friday, July 17 at 5 PM. Attendance will be verified.
+OPENAI_API_KEY=your_openai_api_key
+DEMO_PASSWORD=a_long_shared_demo_password
+CORS_ORIGINS=https://triage-27.vercel.app
 ```
 
-**Study Material**
+Set Vercel's public `TRIAGE_API_BASE_URL` to the Railway API URL. Never expose `OPENAI_API_KEY` or `DEMO_PASSWORD` in Vercel.
+
+The current hosted backend uses SQLite, a local archive directory, and in-memory sessions. Data and sessions may not survive a redeploy or restart. Google OAuth remains local-only: do not upload `credentials.json` or `token.json` to Railway. A production version needs per-user web OAuth, durable storage, and object storage for archives.
+
+## How Codex was used
+
+Triage was built through a human-directed, iterative engineering workflow with Codex as the primary coding collaborator. The project owner defined the student problem, interaction boundaries, safety rules, product direction, visual feedback, and deployment choices; Codex helped translate those decisions into the working FastAPI, SQLite, and vanilla-JavaScript application.
+
+Codex was used to scaffold and refine the classification pipeline, review-only Approval Drawer, Google-source ingestion, deployment configuration, navigation behavior, landing flow, demo data, and documentation. It also helped investigate failures such as OAuth scope handling, Gmail classification-schema compatibility, nested panel scrolling, and frontend text rendering. Every external action remains intentionally constrained: the app drafts and stages work, while the student retains the final decision and performs any real submission themselves.
+
+The dated [build log](docs/BUILD_LOG.md) records the implementation phases, commits, validation work, known constraints, and the reported/estimated credit usage. The link is relative, so it opens directly inside this GitHub repository.
+
+## Quick smoke test
+
+Paste this into Stream / Ingest:
 
 ```text
-Unit 3 question bank: Explain the difference between supervised and unsupervised learning. Compare both approaches with one example each.
+Class representative: completion poll — reply YES after you submit your DBMS Lab Record. Please respond by July 22, 2026, 6 PM.
 ```
+
+Expected result: an **Obligation** with poll/form detection. In the Action Queue, choose **Mark done for review**. Human Review should display an editable draft:
+
+```text
+Suggested reply: YES, completed
+```
+
+Editing or approving this draft does not send it anywhere.
+
+## Data safety
+
+`backend/triage.db`, `backend/token.json`, `backend/credentials.json`, `backend/.env`, and `backend/archive/` are local user data. They are intentionally excluded from version control. Do not delete, reset, or recreate the database as a testing or cleanup step.
 
 ## License
 
