@@ -145,3 +145,4 @@ yarn.lock
 
 # Blog deployments
 .postman_environment.json
+.superdesign/tmp/

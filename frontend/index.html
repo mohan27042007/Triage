@@ -10,8 +10,55 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
+    <section id="landing-screen" class="landing-screen" aria-labelledby="landing-title">
+      <header class="landing-nav">
+        <a class="brand" href="#top" aria-label="Triage home"><img src="assets/triage-pulse.png" alt="" /><span>Triage</span></a>
+        <div class="landing-nav-actions"><button class="text-button" type="button" data-scroll-to="how-it-works">How it works</button><button class="landing-login secondary" type="button" data-open-login>Demo login</button></div>
+      </header>
+      <main id="top">
+        <section class="landing-hero">
+          <div class="landing-hero-copy">
+            <p class="eyebrow">STUDENT ATTENTION, TRIAGED</p>
+            <h1 id="landing-title">Turn institutional noise into <span>action, study, and calm.</span></h1>
+            <p class="landing-lede">Triage gathers what college sends across your channels, explains what matters, and keeps the final decision with you.</p>
+            <div class="landing-actions"><button class="primary-cta" type="button" data-open-login>Explore the demo <span aria-hidden="true">→</span></button><button class="text-button" type="button" data-scroll-to="capabilities">See the system</button></div>
+            <p class="availability-note"><span class="status-dot"></span> Interactive demo available now · Production integrations shown with honest status</p>
+          </div>
+          <div class="pulse-stage" aria-label="An incoming pulse branching into action, review, and study paths">
+            <img class="hero-pulse" src="assets/triage-pulse.png" alt="Triage pulse branching into action, review, and study" />
+            <span class="pulse-message pulse-message-gmail">Gmail</span><span class="pulse-message pulse-message-classroom">Classroom</span><span class="pulse-message pulse-message-file">Files</span>
+            <div class="pulse-legend"><span><i class="legend-red"></i>Action Queue</span><span><i class="legend-amber"></i>Human Review</span><span><i class="legend-green"></i>Study Plan</span></div>
+          </div>
+        </section>
+
+        <section id="how-it-works" class="landing-section process-section">
+          <p class="eyebrow">ONE INTAKE, THREE CLEAR PATHS</p><h2>From incoming message to a decision you can trust.</h2>
+          <div class="process-grid"><article><span>01</span><h3>Ingest</h3><p>Email, Classroom, files, and WhatsApp-shaped updates arrive in one place.</p></article><article><span>02</span><h3>Classify</h3><p>Triage separates obligations, study material, and noise with the evidence it found.</p></article><article><span>03</span><h3>Decide</h3><p>Deadlines are prioritized, study topics are ranked, and nothing leaves without your approval.</p></article></div>
+        </section>
+
+        <section id="capabilities" class="landing-section capability-section">
+          <div><p class="eyebrow">THE STUDENT DESK, EXPLAINED</p><h2>Designed for the things that quietly fall through the cracks.</h2></div>
+          <div class="capability-grid">
+            <article class="capability-card action-card"><p class="capability-kicker">ACTION QUEUE</p><h3>Deadlines, forms, registrations, and polls.</h3><p>See what is immediate, what can wait, and what is mandatory before you miss it.</p><span class="availability available">Available in demo</span></article>
+            <article class="capability-card study-card"><p class="capability-kicker">STUDY PLAN</p><h3>Study what the question bank actually emphasizes.</h3><p>Compare material, rank recurring topics, and get outlines—not generated answers.</p><span class="availability available">Available in demo</span></article>
+            <article class="capability-card review-card"><p class="capability-kicker">HUMAN REVIEW</p><h3>Triage drafts. You decide.</h3><p>Review mark-done requests and copy/edit poll or form drafts before sending anything yourself.</p><span class="availability available">Available in demo</span></article>
+            <article class="capability-card source-card-landing"><p class="capability-kicker">CONNECTED SOURCES</p><h3>One desk for scattered student communication.</h3><p>Gmail and Classroom use read-only OAuth locally; files work in the demo; WhatsApp uses representative demo data.</p><span class="availability local">Local integration / demo data</span></article>
+          </div>
+        </section>
+
+        <section class="landing-section safety-section"><div><p class="eyebrow">AGENCY BY DESIGN</p><h2>Useful automation without handing away control.</h2></div><div class="safety-list"><p><strong>Read-only by default.</strong> Triage reviews sources; it does not silently send or submit.</p><p><strong>Human approval before action.</strong> The student approves a change or copies a draft themselves.</p><p><strong>Built for learning.</strong> Assignment help provides structure and checks, never a completed submission.</p></div></section>
+
+        <section class="landing-section roadmap-section"><p class="eyebrow">NOW · NEXT · PRODUCTION</p><h2>A credible path from demo to daily student infrastructure.</h2><div class="roadmap-grid"><article><span>NOW</span><h3>Interactive demo</h3><p>Classification, queue, study planning, scaffolding, reminders, and review-first drafts.</p></article><article><span>NEXT</span><h3>Hosted account connections</h3><p>Per-user Google OAuth and durable storage designed for a hosted web experience.</p></article><article><span>PRODUCTION</span><h3>Reliable multi-source triage</h3><p>Real WhatsApp bridge, secure source sync, notifications, and staged routine-form assistance.</p></article></div></section>
+
+        <section class="landing-cta"><img src="assets/triage-pulse.png" alt="" /><div><p class="eyebrow">SEE THE CURRENT BUILD</p><h2>Open the student desk.</h2><p>Explore the working demo, then judge Triage by the decisions it helps you make.</p></div><button class="primary-cta" type="button" data-open-login>Enter demo <span aria-hidden="true">→</span></button></section>
+      </main>
+      <footer class="landing-footer"><a class="brand" href="#top"><img src="assets/triage-pulse.png" alt="" /><span>Triage</span></a><span>Student attention, sorted with care.</span></footer>
+    </section>
+
     <section id="login-screen" class="login-screen" aria-labelledby="login-title">
       <form id="login-form" class="login-card">
+        <button id="back-to-landing" class="back-button" type="button">← Back to overview</button>
+        <img class="login-mark" src="assets/triage-pulse.png" alt="" />
         <p class="eyebrow">TRIAGE / DEMO ACCESS</p>
         <h1 id="login-title">Triage</h1>
         <p class="intro">Enter the shared demo password to open your student desk.</p>
@@ -32,7 +79,7 @@
       </div>
       </nav>
 
-      <button id="previous-panel" class="panel-navigation panel-navigation-previous" type="button" aria-label="Go to previous panel" disabled>‹</button>
+      <button id="previous-panel" class="panel-navigation panel-navigation-previous" type="button" aria-label="Go to previous panel" hidden>‹</button>
       <button id="next-panel" class="panel-navigation panel-navigation-next" type="button" aria-label="Go to next panel">›</button>
 
       <button id="approval-trigger" class="approval-ribbon" type="button" aria-label="Human Review, 0 pending actions" aria-controls="approval-drawer" aria-haspopup="dialog" aria-expanded="false">
@@ -152,6 +199,22 @@
         </aside>
       </div>
     </div>
+
+    <div class="settings-orbit">
+      <div id="settings-menu" class="settings-menu" aria-hidden="true">
+        <button type="button" class="settings-action settings-profile" data-settings-view="profile" aria-label="Open profile">●<span>Profile</span></button>
+        <button type="button" class="settings-action settings-theme" data-settings-view="theme" aria-label="Open theme settings">◐<span>Theme</span></button>
+        <button type="button" class="settings-action settings-app" data-settings-view="app" aria-label="Open app settings">⌘<span>App settings</span></button>
+      </div>
+      <button id="settings-fab" class="settings-fab" type="button" aria-label="Open settings" aria-controls="settings-menu" aria-expanded="false">⚙</button>
+    </div>
+    <aside id="settings-drawer" class="settings-drawer" aria-hidden="true" aria-labelledby="settings-title">
+      <button id="close-settings" class="close-settings" type="button" aria-label="Close settings">×</button>
+      <p class="eyebrow">TRIAGE PREFERENCES</p><h2 id="settings-title">Settings</h2>
+      <section data-settings-panel="profile"><h3>Demo profile</h3><p class="muted">You are using the shared Triage demo desk. Source connections and preferences stay local to this browser when possible.</p><button id="settings-sign-out" class="secondary" type="button">Sign out of demo</button></section>
+      <section data-settings-panel="theme" hidden><h3>Theme</h3><p class="muted">Choose the surface that is easiest on your eyes.</p><div class="theme-options"><button type="button" data-theme-choice="system">System</button><button type="button" data-theme-choice="light">Light</button><button type="button" data-theme-choice="dark">Dark</button></div></section>
+      <section data-settings-panel="app" hidden><h3>App settings</h3><label class="settings-toggle"><input id="deadline-reminders-setting" type="checkbox" checked /><span>Show deadline reminders</span></label><label class="settings-toggle"><input id="reduced-motion-setting" type="checkbox" /><span>Reduce motion</span></label><p class="muted">These preferences affect this browser only.</p></section>
+    </aside>
     <script src="/api/config"></script>
     <script src="app.js"></script>
   </body>

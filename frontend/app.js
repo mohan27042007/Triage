@@ -24,6 +24,7 @@ const assignmentPrompt = document.querySelector("#assignment-prompt");
 const assignmentError = document.querySelector("#assignment-error");
 const assignmentResult = document.querySelector("#assignment-result");
 const assignmentHistory = document.querySelector("#assignment-history");
+const landingScreen = document.querySelector("#landing-screen");
 const loginScreen = document.querySelector("#login-screen");
 const loginForm = document.querySelector("#login-form");
 const loginPassword = document.querySelector("#login-password");
@@ -34,10 +35,18 @@ const appSections = document.querySelectorAll(".app-section");
 const panelScroller = document.querySelector(".panel-scroller");
 const previousPanelButton = document.querySelector("#previous-panel");
 const nextPanelButton = document.querySelector("#next-panel");
+const backToLandingButton = document.querySelector("#back-to-landing");
+const settingsFab = document.querySelector("#settings-fab");
+const settingsMenu = document.querySelector("#settings-menu");
+const settingsDrawer = document.querySelector("#settings-drawer");
+const closeSettingsButton = document.querySelector("#close-settings");
+const deadlineRemindersSetting = document.querySelector("#deadline-reminders-setting");
+const reducedMotionSetting = document.querySelector("#reduced-motion-setting");
 let wheelNavigationLocked = false;
 let authToken = localStorage.getItem("triage-demo-token");
 let drawerTrigger = null;
 let deadlineReminderDismissed = false;
+let deadlineRemindersEnabled = localStorage.getItem("triage-deadline-reminders") !== "false";
 let currentUrgentItems = [];
 const notifiedUrgentItemIds = new Set();
 const notificationRequestStorageKey = "triage-reminder-notification-requested";
@@ -62,14 +71,56 @@ function apiUrl(path) {
 function showLoginScreen() {
   authToken = null;
   localStorage.removeItem("triage-demo-token");
+  landingScreen.hidden = true;
   appShell.hidden = true;
   loginScreen.hidden = false;
   loginPassword.value = "";
 }
 
+function showLandingScreen() {
+  authToken = null;
+  localStorage.removeItem("triage-demo-token");
+  landingScreen.hidden = false;
+  loginScreen.hidden = true;
+  appShell.hidden = true;
+  closeSettingsDrawer();
+}
+
 function showApp() {
+  landingScreen.hidden = true;
   loginScreen.hidden = true;
   appShell.hidden = false;
+}
+
+function closeSettingsDrawer() {
+  settingsDrawer.classList.remove("is-open");
+  settingsDrawer.setAttribute("aria-hidden", "true");
+  settingsMenu.setAttribute("aria-hidden", "true");
+  settingsFab.setAttribute("aria-expanded", "false");
+  settingsMenu.classList.remove("is-open");
+}
+
+function openSettingsView(viewName) {
+  document.querySelectorAll("[data-settings-panel]").forEach((panel) => {
+    panel.hidden = panel.dataset.settingsPanel !== viewName;
+  });
+  settingsDrawer.setAttribute("aria-hidden", "false");
+  settingsDrawer.classList.add("is-open");
+  settingsMenu.setAttribute("aria-hidden", "true");
+  settingsMenu.classList.remove("is-open");
+  settingsFab.setAttribute("aria-expanded", "false");
+}
+
+function applyTheme(theme) {
+  if (theme === "system") {
+    delete document.documentElement.dataset.theme;
+  } else {
+    document.documentElement.dataset.theme = theme;
+  }
+  localStorage.setItem("triage-theme", theme);
+  document.querySelectorAll("[data-theme-choice]").forEach((button) => {
+    button.classList.toggle("is-selected", button.dataset.themeChoice === theme);
+  });
 }
 
 async function apiFetch(url, options = {}) {
@@ -186,6 +237,41 @@ loginForm.addEventListener("submit", async (event) => {
   }
 });
 
+document.querySelectorAll("[data-open-login]").forEach((button) => {
+  button.addEventListener("click", showLoginScreen);
+});
+document.querySelectorAll("[data-scroll-to]").forEach((button) => {
+  button.addEventListener("click", () => document.querySelector(`#${button.dataset.scrollTo}`)?.scrollIntoView({ behavior: "smooth" }));
+});
+backToLandingButton.addEventListener("click", showLandingScreen);
+
+settingsFab.addEventListener("click", () => {
+  const open = !settingsMenu.classList.contains("is-open");
+  settingsMenu.classList.toggle("is-open", open);
+  settingsMenu.setAttribute("aria-hidden", String(!open));
+  settingsFab.setAttribute("aria-expanded", String(open));
+});
+document.querySelectorAll("[data-settings-view]").forEach((button) => button.addEventListener("click", () => openSettingsView(button.dataset.settingsView)));
+closeSettingsButton.addEventListener("click", () => {
+  settingsDrawer.setAttribute("aria-hidden", "true");
+  settingsDrawer.classList.remove("is-open");
+});
+document.querySelectorAll("[data-theme-choice]").forEach((button) => button.addEventListener("click", () => applyTheme(button.dataset.themeChoice)));
+deadlineRemindersSetting.checked = deadlineRemindersEnabled;
+deadlineRemindersSetting.addEventListener("change", () => {
+  deadlineRemindersEnabled = deadlineRemindersSetting.checked;
+  localStorage.setItem("triage-deadline-reminders", String(deadlineRemindersEnabled));
+  if (!deadlineRemindersEnabled) deadlineReminder.hidden = true;
+});
+reducedMotionSetting.checked = localStorage.getItem("triage-reduced-motion") === "true";
+document.documentElement.dataset.reducedMotion = String(reducedMotionSetting.checked);
+reducedMotionSetting.addEventListener("change", () => {
+  document.documentElement.dataset.reducedMotion = String(reducedMotionSetting.checked);
+  localStorage.setItem("triage-reduced-motion", String(reducedMotionSetting.checked));
+});
+document.querySelector("#settings-sign-out").addEventListener("click", showLandingScreen);
+applyTheme(localStorage.getItem("triage-theme") || "system");
+
 function getScrollableParent(target, stopElement) {
   let el = target;
   while (el && el !== stopElement) {
@@ -245,7 +331,8 @@ nextPanelButton.addEventListener("click", () => moveBetweenPanels(1));
 function scrollToSection(sectionName) {
   const section = document.querySelector(`#${sectionName}-section`);
   if (!section) return;
-  panelScroller.scrollTo({ left: section.offsetLeft, behavior: "smooth" });
+  const centeredLeft = Math.max(0, section.offsetLeft - (panelScroller.clientWidth - section.clientWidth) / 2);
+  panelScroller.scrollTo({ left: centeredLeft, behavior: "smooth" });
   setActiveRailNode(sectionName);
 }
 
@@ -260,8 +347,8 @@ function setActiveRailNode(sectionName) {
     }
   });
   const activeIndex = [...railNodes].findIndex((railNode) => railNode.dataset.section === sectionName);
-  previousPanelButton.disabled = activeIndex <= 0;
-  nextPanelButton.disabled = activeIndex === railNodes.length - 1;
+  previousPanelButton.hidden = activeIndex <= 0;
+  nextPanelButton.hidden = activeIndex === railNodes.length - 1;
 }
 
 panelScroller.addEventListener("scroll", () => {
@@ -552,7 +639,7 @@ function updateDeadlineReminder(immediateItems) {
 
   currentUrgentItems = urgentItems.map(({ item }) => item);
   notifyNewUrgentItems(currentUrgentItems);
-  if (deadlineReminderDismissed || !urgentItems.length) {
+  if (!deadlineRemindersEnabled || deadlineReminderDismissed || !urgentItems.length) {
     deadlineReminder.hidden = true;
     return;
   }
@@ -729,7 +816,7 @@ if (authToken) {
   showApp();
   loadAppData();
 } else {
-  showLoginScreen();
+  showLandingScreen();
 }
 
 studyForm.addEventListener("submit", async (event) => {
