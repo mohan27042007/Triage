@@ -368,6 +368,7 @@ function setActiveRailNode(index) {
     }
   });
   railToggle.style.setProperty("--active-index", String(index));
+  railToggle.dataset.activeIndex = String(index);
   previousPanelButton.hidden = index <= 0;
   nextPanelButton.hidden = index === railNodes.length - 1;
 }
