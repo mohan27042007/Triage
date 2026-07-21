@@ -99,7 +99,10 @@ def classify(text: str) -> dict[str, Any]:
             "format": {
                 "type": "json_schema",
                 "name": "triage_classification",
-                "strict": True,
+                # The poll/form flag is intentionally optional. OpenAI strict schemas
+                # require every property to be listed in `required`, so strict mode
+                # cannot represent this backward-compatible classification shape.
+                "strict": False,
                 "schema": CLASSIFICATION_SCHEMA,
             }
         },
