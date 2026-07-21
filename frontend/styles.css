@@ -40,6 +40,12 @@ main { width: 100%; }
 .rail-node[data-section="study"] { --node-color: var(--triage-green); }
 .rail-node[data-section="pending"] { --node-color: var(--triage-amber); }
 .rail-node[data-section="assignment"] { --node-color: var(--triage-amber); }
+.panel-navigation { position: fixed; z-index: 12; top: 50%; width: 42px; height: 68px; margin: 0; padding: 0; border: 1px solid rgb(246 243 236 / 22%); border-radius: 6px; color: var(--paper); background: rgb(27 30 38 / 88%); box-shadow: 0 8px 20px rgb(0 0 0 / 22%); font: 500 42px/1 "Fraunces", Georgia, serif; transform: translateY(-50%); }
+.panel-navigation:hover:not(:disabled) { background: var(--surface); }
+.panel-navigation:focus-visible { outline: 2px solid var(--paper); outline-offset: 3px; }
+.panel-navigation:disabled { cursor: default; opacity: .38; }
+.panel-navigation-previous { left: 84px; }
+.panel-navigation-next { right: 18px; }
 .approval-ribbon { position: fixed; z-index: 20; top: 0; right: 24px; display: flex; align-items: center; gap: 8px; width: auto; margin: 0; padding: 10px 18px 11px; border: 0; border-radius: 0 0 6px 6px; color: var(--ink); background: var(--triage-amber); clip-path: polygon(0 0, 100% 0, 100% 100%, 10px 100%, 0 calc(100% - 10px)); font-size: 12px; }
 .approval-ribbon:hover:not(:disabled) { box-shadow: 0 5px 16px rgb(0 0 0 / 24%); transform: none; }
 .approval-ribbon:focus-visible { outline: 2px solid var(--paper); outline-offset: 3px; }
@@ -278,6 +284,8 @@ dd { margin: 4px 0 0; font: 12px "JetBrains Mono", ui-monospace, monospace; lett
 
 @media (max-width: 560px) {
   .deadline-reminder { top: 64px; left: 84px; max-width: calc(100vw - 100px); }
+  .panel-navigation-previous { left: 66px; }
+  .panel-navigation-next { right: 10px; }
   .panel-scroller { gap: 12px; padding: 12px; }
   .app-section { flex-basis: 92vw; min-height: calc(100vh - 24px); max-height: calc(100vh - 24px); padding: 28px 20px 28px 92px; }
   .queue-heading { align-items: start; flex-direction: column; }

@@ -32,6 +32,8 @@ const appShell = document.querySelector("#app-shell");
 const railNodes = document.querySelectorAll(".rail-node");
 const appSections = document.querySelectorAll(".app-section");
 const panelScroller = document.querySelector(".panel-scroller");
+const previousPanelButton = document.querySelector("#previous-panel");
+const nextPanelButton = document.querySelector("#next-panel");
 let wheelNavigationLocked = false;
 let authToken = localStorage.getItem("triage-demo-token");
 let drawerTrigger = null;
@@ -187,9 +189,6 @@ loginForm.addEventListener("submit", async (event) => {
 function getScrollableParent(target, stopElement) {
   let el = target;
   while (el && el !== stopElement) {
-    if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") {
-      return el;
-    }
     const style = window.getComputedStyle(el);
     const overflowY = style.overflowY || style.overflow || "";
     const isScrollable = (overflowY === "auto" || overflowY === "scroll") && el.scrollHeight > el.clientHeight;
@@ -201,12 +200,17 @@ function getScrollableParent(target, stopElement) {
   return null;
 }
 
+function isAtScrollBoundary(element, deltaY) {
+  if (deltaY < 0) return element.scrollTop <= 0;
+  return element.scrollTop + element.clientHeight >= element.scrollHeight - 1;
+}
+
 panelScroller.addEventListener("wheel", (event) => {
   if (!event.deltaY) return;
 
   const scrollableParent = getScrollableParent(event.target, panelScroller);
-  if (scrollableParent) {
-    // Let the element scroll vertically inside the panel
+  if (scrollableParent && !isAtScrollBoundary(scrollableParent, event.deltaY)) {
+    // Keep scrolling inside the panel until its relevant boundary is reached.
     return;
   }
 
@@ -228,6 +232,16 @@ railNodes.forEach((railNode) => {
   railNode.addEventListener("click", () => scrollToSection(railNode.dataset.section));
 });
 
+function moveBetweenPanels(direction) {
+  const activeIndex = [...railNodes].findIndex((railNode) => railNode.classList.contains("is-active"));
+  const nextIndex = activeIndex + direction;
+  if (nextIndex < 0 || nextIndex >= railNodes.length) return;
+  scrollToSection(railNodes[nextIndex].dataset.section);
+}
+
+previousPanelButton.addEventListener("click", () => moveBetweenPanels(-1));
+nextPanelButton.addEventListener("click", () => moveBetweenPanels(1));
+
 function scrollToSection(sectionName) {
   const section = document.querySelector(`#${sectionName}-section`);
   if (!section) return;
@@ -245,6 +259,9 @@ function setActiveRailNode(sectionName) {
       railNode.removeAttribute("aria-current");
     }
   });
+  const activeIndex = [...railNodes].findIndex((railNode) => railNode.dataset.section === sectionName);
+  previousPanelButton.disabled = activeIndex <= 0;
+  nextPanelButton.disabled = activeIndex === railNodes.length - 1;
 }
 
 panelScroller.addEventListener("scroll", () => {
@@ -273,12 +290,8 @@ document.addEventListener("keydown", (event) => {
     ["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(document.activeElement.tagName)
   ) return;
 
-  const activeIndex = [...railNodes].findIndex((railNode) => railNode.classList.contains("is-active"));
-  const nextIndex = activeIndex + (event.key === "ArrowRight" ? 1 : -1);
-  if (nextIndex < 0 || nextIndex >= railNodes.length) return;
-
   event.preventDefault();
-  scrollToSection(railNodes[nextIndex].dataset.section);
+  moveBetweenPanels(event.key === "ArrowRight" ? 1 : -1);
 });
 
 const classificationTravel = {
