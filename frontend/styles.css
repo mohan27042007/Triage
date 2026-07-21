@@ -129,7 +129,7 @@ main { width: 100%; }
 }
 .panel-scroller:focus-visible { outline: 2px solid var(--paper); outline-offset: -4px; }
 .dashboard-header { margin-bottom: 24px; }
-.dashboard-header h1 { margin: 0 0 6px; font-size: 36px; }
+.dashboard-brand { display: flex; align-items: center; gap: 12px; margin: 0 0 6px; }.dashboard-brand img { width: 40px; height: 40px; border: 1px solid rgb(246 243 236 / 12%); border-radius: 12px; object-fit: cover; box-shadow: 0 8px 20px rgb(0 0 0 / 22%); }.dashboard-header h1 { margin: 0; font-size: 36px; }
 .tagline { margin: 0; color: var(--triage-slate); font-size: 14px; line-height: 1.5; }
 .app-section {
   position: relative;
