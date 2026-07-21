@@ -32,7 +32,7 @@ html[data-theme="light"] form, html[data-theme="light"] .result, html[data-theme
 html[data-theme="light"] textarea, html[data-theme="light"] input { color: var(--paper); background: #fff; }
 html[data-reduced-motion="true"] *, html[data-reduced-motion="true"] *::before, html[data-reduced-motion="true"] *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
 main { width: 100%; }
-.landing-screen { min-height: 100vh; overflow-y: auto; color: var(--paper); background: var(--ink); }
+.landing-screen { height: 100vh; height: 100dvh; overflow-y: auto; overscroll-behavior-y: contain; color: var(--paper); background: var(--ink); }
 .landing-nav { position: sticky; z-index: 5; top: 0; display: flex; align-items: center; justify-content: space-between; padding: 18px clamp(24px, 6vw, 88px); border-bottom: 1px solid rgb(246 243 236 / 9%); background: rgb(18 20 26 / 74%); backdrop-filter: blur(16px); }
 .brand { display: inline-flex; align-items: center; gap: 10px; color: var(--paper); font: 500 22px "Fraunces", Georgia, serif; text-decoration: none; }
 .brand img { width: 34px; height: 34px; border-radius: 10px; object-fit: cover; }

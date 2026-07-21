@@ -240,8 +240,22 @@ loginForm.addEventListener("submit", async (event) => {
 document.querySelectorAll("[data-open-login]").forEach((button) => {
   button.addEventListener("click", showLoginScreen);
 });
+function scrollLandingTo(sectionId) {
+  const target = landingScreen.querySelector(`#${sectionId}`);
+  const nav = landingScreen.querySelector(".landing-nav");
+  if (!target || landingScreen.hidden) return;
+
+  const targetTop = target.getBoundingClientRect().top;
+  const landingTop = landingScreen.getBoundingClientRect().top;
+  const navHeight = nav?.getBoundingClientRect().height || 0;
+  landingScreen.scrollTo({
+    top: landingScreen.scrollTop + targetTop - landingTop - navHeight - 20,
+    behavior: "smooth",
+  });
+}
+
 document.querySelectorAll("[data-scroll-to]").forEach((button) => {
-  button.addEventListener("click", () => document.querySelector(`#${button.dataset.scrollTo}`)?.scrollIntoView({ behavior: "smooth" }));
+  button.addEventListener("click", () => scrollLandingTo(button.dataset.scrollTo));
 });
 backToLandingButton.addEventListener("click", showLandingScreen);
 
