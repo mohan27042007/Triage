@@ -77,6 +77,7 @@
         <button class="rail-node" type="button" data-section="queue" aria-label="Action Queue" aria-controls="queue-section"><span class="rail-dot"></span><span class="rail-label">Action Queue</span></button>
         <button class="rail-node" type="button" data-section="study" aria-label="Study Plan" aria-controls="study-section"><span class="rail-dot"></span><span class="rail-label">Study Plan</span></button>
         <button class="rail-node" type="button" data-section="assignment" aria-label="Assignment Scaffold" aria-controls="assignment-section"><span class="rail-dot"></span><span class="rail-label">Assignment Scaffold</span></button>
+        <button class="rail-node" type="button" data-section="history" aria-label="Archive and history" aria-controls="history-section"><span class="rail-dot"></span><span class="rail-label">Archive / History</span></button>
       </div>
       </nav>
 
@@ -193,6 +194,20 @@
           <h3>Reference history</h3>
           <div id="assignment-history" class="assignment-history" aria-live="polite"></div>
         </div>
+      </section>
+      <section id="history-section" class="app-section glass-panel history-section" tabindex="0" aria-labelledby="history-title">
+        <p class="eyebrow">ARCHIVE / HISTORY</p>
+        <h2 id="history-title">Find what Triage has already seen</h2>
+        <p class="intro">Search your local classification history and download any retained files. This panel never changes, sends, or resubmits an item.</p>
+        <form id="history-filters" class="history-filters">
+          <label>Search messages or reasons<input id="history-query" name="query" type="search" placeholder="Search a notice, course, or deadline…" autocomplete="off" /></label>
+          <label>Source<select id="history-source" name="source"><option value="">All sources</option><option value="gmail">Gmail</option><option value="classroom">Classroom</option><option value="manual">Manual upload</option><option value="whatsapp-demo">WhatsApp demo</option></select></label>
+          <label>Classification<select id="history-category" name="category"><option value="">All classifications</option><option value="Obligation">Obligation</option><option value="Study Material">Study Material</option><option value="Noise">Noise</option></select></label>
+          <label>Status<select id="history-status" name="status"><option value="">Open and done</option><option value="open">Open</option><option value="done">Done</option></select></label>
+          <button class="secondary" type="reset">Clear filters</button>
+        </form>
+        <p id="history-summary" class="muted" aria-live="polite"></p>
+        <div id="history-list" class="history-list" aria-live="polite"></div>
       </section>
       </main>
 

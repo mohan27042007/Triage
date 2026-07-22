@@ -100,6 +100,9 @@ def main() -> None:
         )
         assert newest is not None
         assert database.get_recent_items()[0]["id"] == newest["id"]
+        history = database.get_history_items(query="later", category="Noise", source="manual")
+        assert [entry["id"] for entry in history] == [newest["id"]]
+        assert database.get_history_items(status="done") == []
         listed = database.get_archived_attachments()
         assert len(listed) == 1 and listed[0]["archived_path"] == attachments[0]["archived_path"]
         del item, listed

@@ -186,6 +186,39 @@ def get_recent_items(limit: int = 60) -> list[dict[str, Any]]:
     return [_row_to_item(row) for row in rows]
 
 
+def get_history_items(
+    query: str = "", category: str = "", source: str = "", status: str = "", limit: int = 100
+) -> list[dict[str, Any]]:
+    """Search the locally stored item history using safe, optional filters."""
+    if not 1 <= limit <= 100:
+        raise ValueError("History limit must be between 1 and 100.")
+    allowed_categories = {"Obligation", "Study Material", "Noise"}
+    allowed_sources = VALID_ITEM_SOURCES
+    allowed_statuses = {"open", "done"}
+    clauses: list[str] = []
+    parameters: list[Any] = []
+    if query.strip():
+        clauses.append("(text LIKE ? COLLATE NOCASE OR reason LIKE ? COLLATE NOCASE)")
+        search_term = f"%{query.strip()}%"
+        parameters.extend([search_term, search_term])
+    if category in allowed_categories:
+        clauses.append("category = ?")
+        parameters.append(category)
+    if source in allowed_sources:
+        clauses.append("source = ?")
+        parameters.append(source)
+    if status in allowed_statuses:
+        clauses.append("status = ?")
+        parameters.append(status)
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    with _connection() as connection:
+        rows = connection.execute(
+            f"SELECT * FROM items {where} ORDER BY created_at DESC, id DESC LIMIT ?",
+            [*parameters, limit],
+        ).fetchall()
+    return [_row_to_item(row) for row in rows]
+
+
 def get_archived_attachments() -> list[dict[str, Any]]:
     """Return metadata for locally archived source and upload files, newest first."""
     entries: list[dict[str, Any]] = []

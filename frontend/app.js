@@ -16,6 +16,9 @@ const refreshQueueButton = document.querySelector("#refresh-queue");
 const streamList = document.querySelector("#stream-list");
 const archiveList = document.querySelector("#archive-list");
 const refreshArchiveButton = document.querySelector("#refresh-archive");
+const historyFilters = document.querySelector("#history-filters");
+const historyList = document.querySelector("#history-list");
+const historySummary = document.querySelector("#history-summary");
 const studyForm = document.querySelector("#study-form");
 const studyPlan = document.querySelector("#study-plan");
 const studyError = document.querySelector("#study-error");
@@ -63,6 +66,7 @@ let panelSettleTimer = null;
 let detailReturnFocus = null;
 let queueItemsById = new Map();
 let streamItemsById = new Map();
+let historyItemsById = new Map();
 let studyTopics = [];
 let authToken = localStorage.getItem("triage-demo-token");
 let drawerTrigger = null;
@@ -162,6 +166,7 @@ async function apiFetch(url, options = {}) {
 function loadAppData() {
   loadQueue();
   loadStream();
+  loadHistory();
   loadStudyPlan();
   loadPendingActions();
   loadAssignmentHistory();
@@ -610,6 +615,7 @@ form.addEventListener("submit", async (event) => {
       if (data.category === "Obligation") loadQueue();
       loadArchive();
       loadStream();
+      loadHistory();
     });
   } catch (requestError) {
     error.textContent = requestError.message;
@@ -732,6 +738,7 @@ async function connectSource(sourceKey) {
     saveConnectedSources();
     await loadQueue();
     await loadStream();
+    await loadHistory();
     await loadArchive();
   } catch (requestError) {
     connectedSources[sourceKey] = { ...connectedSources[sourceKey], connected: false, error: requestError.message };
@@ -795,6 +802,52 @@ streamList.addEventListener("click", (event) => {
   if (!trigger) return;
   const item = streamItemsById.get(trigger.dataset.openStreamItem);
   if (item) openStreamDetail(item, trigger);
+});
+
+async function loadHistory() {
+  const filters = new URLSearchParams();
+  for (const [key, value] of new FormData(historyFilters).entries()) {
+    if (typeof value === "string" && value.trim()) filters.set(key, value.trim());
+  }
+  historyList.innerHTML = '<p class="muted">Searching local history…</p>';
+  try {
+    const response = await apiFetch(apiUrl(`/history?${filters.toString()}`));
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "Could not load local history.");
+    const items = data.items || [];
+    historyItemsById = new Map(items.map((item) => [String(item.id), item]));
+    historySummary.textContent = `${items.length} local item${items.length === 1 ? "" : "s"} found`;
+    if (!items.length) {
+      historyList.innerHTML = '<p class="empty-state">No local items match these filters.</p>';
+      return;
+    }
+    historyList.innerHTML = items.map((item) => `
+      <article class="history-record">
+        <button class="history-record-trigger" type="button" data-open-history-item="${item.id}" aria-label="Open ${escapeHtml(streamSummary(item))}">
+          <span class="history-record-topline"><span>${escapeHtml(sourceLabel(item.source))}</span><span>${escapeHtml(streamTimestamp(item.created_at))}</span></span>
+          <span class="history-record-summary">${escapeHtml(streamSummary(item))}</span>
+          <span class="history-record-footer"><span class="badge ${escapeHtml(item.category.toLowerCase().replace(/\s+/g, "-"))}">${escapeHtml(item.category)}</span><span class="history-status history-status-${escapeHtml(item.status)}">${escapeHtml(item.status)}</span><span>View →</span></span>
+        </button>
+      </article>
+    `).join("");
+  } catch (requestError) {
+    historySummary.textContent = "";
+    historyList.innerHTML = `<p class="error">${escapeHtml(requestError.message)}</p>`;
+  }
+}
+
+historyFilters.addEventListener("input", loadHistory);
+historyFilters.addEventListener("change", loadHistory);
+historyFilters.addEventListener("submit", (event) => {
+  event.preventDefault();
+  loadHistory();
+});
+historyFilters.addEventListener("reset", () => window.setTimeout(loadHistory, 0));
+historyList.addEventListener("click", (event) => {
+  const trigger = event.target.closest("[data-open-history-item]");
+  if (!trigger) return;
+  const item = historyItemsById.get(trigger.dataset.openHistoryItem);
+  if (item) openStreamDetail(item, trigger, "ARCHIVE / HISTORY");
 });
 
 async function loadQueue() {
@@ -1108,13 +1161,13 @@ function openQueueDetail(item, trigger) {
   `, trigger);
 }
 
-function openStreamDetail(item, trigger) {
+function openStreamDetail(item, trigger, origin = "UNIFIED STREAM") {
   const deadline = item.deadline || "No explicit deadline";
   const destination = item.category === "Obligation" && item.status === "open"
     ? '<button class="stream-queue-button secondary" type="button" data-stream-destination="queue">Open in Action Queue</button>'
     : "";
   openDetailDialog(`
-    <p class="eyebrow">${escapeHtml(sourceLabel(item.source))} / UNIFIED STREAM</p>
+    <p class="eyebrow">${escapeHtml(sourceLabel(item.source))} / ${escapeHtml(origin)}</p>
     <h2 id="detail-title">${escapeHtml(item.text)}</h2>
     <p class="detail-reason">${escapeHtml(item.reason)}</p>
     <div class="detail-facts"><div><span>Classification</span><strong>${escapeHtml(item.category)}</strong></div><div><span>Received</span><strong>${escapeHtml(streamTimestamp(item.created_at))}</strong></div><div><span>Deadline</span><strong>${escapeHtml(deadline)}</strong></div><div><span>Status</span><strong>${escapeHtml(item.status)}</strong></div></div>

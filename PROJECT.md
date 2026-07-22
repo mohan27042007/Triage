@@ -36,6 +36,7 @@ The key safety mechanism is Human Review. Triage can draft a copy-only response 
 ### Student desk
 
 - Action Queue with urgency grouping, compact cards, detail dialogs, deadline reminders with snooze/optional browser alerts, and local mark-done requests.
+- Archive / History panel with searchable local records, source/category/status filters, and retained-file downloads.
 - Approval Drawer with editable poll/form response drafts, browser-local form details, and explicit no-send language.
 - Ranked Study Plan with expandable topic outlines.
 - Assignment Scaffolding with requirements, concepts, approach, and test cases—never a complete submission.
@@ -74,7 +75,7 @@ Codex was the primary engineering collaborator for this solo build. It helped tr
 
 1. Add per-user hosted Google OAuth and durable account/session storage.
 2. Move from SQLite/local archives to managed storage and object storage.
-3. Add real-time source webhooks where available, robust connection health, retry states, source search, and a fuller archive/history view.
+3. Add real-time source webhooks where available, robust connection health, retry states, source search, and fuller archive-history retention controls.
 4. Add durable object storage, virus scanning, retention controls, and broader file preview support for the local attachment archive.
 5. Investigate a reliable, policy-compliant WhatsApp integration without compromising the stable demo path.
 6. Add more supported routine-form fields only after confirming their privacy and review requirements.

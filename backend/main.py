@@ -38,6 +38,7 @@ from database import (
     get_assignment_history,
     get_archived_attachments,
     get_open_obligations,
+    get_history_items,
     get_recent_items,
     get_pending_actions,
     get_study_plan,
@@ -167,6 +168,14 @@ def queue() -> dict[str, list[dict]]:
 def stream() -> dict[str, list[dict]]:
     """Return the latest classified items across manual and connected sources."""
     return {"items": get_recent_items()}
+
+
+@app.get("/history")
+def history(
+    query: str = "", category: str = "", source: str = "", status: str = ""
+) -> dict[str, list[dict]]:
+    """Search the local classification history without changing any item."""
+    return {"items": get_history_items(query, category, source, status)}
 
 
 @app.get("/sources/google/status")
