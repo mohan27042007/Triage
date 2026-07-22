@@ -13,7 +13,12 @@ from fastapi.responses import FileResponse, JSONResponse
 from dotenv import load_dotenv
 
 from assignment_helper import scaffold_assignment
-from classifier import build_study_plan, classify, draft_poll_or_form_response
+from classifier import (
+    build_study_plan,
+    classify,
+    draft_poll_or_form_response,
+    draft_routine_form_response,
+)
 from classroom_sync import fetch_recent_classroom_items
 from gmail_sync import fetch_recent_gmail_messages
 from google_client import TOKEN_PATH
@@ -250,6 +255,30 @@ def request_queue_item_completion(item_id: int) -> dict:
         item_id=item_id,
         action_type="mark_done",
         payload=payload,
+    )
+
+
+@app.post("/queue/{item_id}/form-draft")
+def request_form_draft(item_id: int) -> dict:
+    """Stage a copy-only routine-form draft without marking an obligation complete."""
+    item = get_item(item_id)
+    if not item or item["category"] != "Obligation" or item["status"] != "open":
+        raise HTTPException(status_code=404, detail="Open queue item not found.")
+
+    draft = draft_routine_form_response(item["text"])
+    if not draft:
+        raise HTTPException(
+            status_code=400,
+            detail="This item does not name supported routine form fields.",
+        )
+    return create_pending_action(
+        item_id=item_id,
+        action_type="prepare_form_draft",
+        payload={
+            "message": f"Review a copy-only form draft for '{item['text'][:120]}'.",
+            "item_text": item["text"],
+            "form_fields": draft["fields"],
+        },
     )
 
 

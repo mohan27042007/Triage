@@ -46,6 +46,8 @@ const settingsFab = document.querySelector("#settings-fab");
 const settingsMenu = document.querySelector("#settings-menu");
 const settingsDrawer = document.querySelector("#settings-drawer");
 const closeSettingsButton = document.querySelector("#close-settings");
+const profileForm = document.querySelector("#profile-form");
+const profileStatus = document.querySelector("#profile-status");
 const deadlineRemindersSetting = document.querySelector("#deadline-reminders-setting");
 const reducedMotionSetting = document.querySelector("#reduced-motion-setting");
 let wheelNavigationLocked = false;
@@ -62,6 +64,8 @@ let deadlineRemindersEnabled = localStorage.getItem("triage-deadline-reminders")
 let currentUrgentItems = [];
 const notifiedUrgentItemIds = new Set();
 const notificationRequestStorageKey = "triage-reminder-notification-requested";
+const formProfileStorageKey = "triage-form-profile";
+const formProfileFields = ["full_name", "roll_number", "college_email", "phone_number", "programme", "section"];
 const apiBaseUrl = (window.TRIAGE_API_BASE_URL || "http://localhost:8000").replace(/\/$/, "");
 const connectedSourcesStorageKey = "triage-connected-sources";
 const reconnectAfterDays = 30;
@@ -149,6 +153,33 @@ function loadAppData() {
   loadPendingActions();
   loadAssignmentHistory();
   loadConnectedSourcesPanel();
+  loadProfile();
+}
+
+function localFormProfile() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(formProfileStorageKey) || "{}");
+    if (!saved || typeof saved !== "object") return {};
+    return Object.fromEntries(formProfileFields.map((field) => [field, typeof saved[field] === "string" ? saved[field] : ""]));
+  } catch {
+    return {};
+  }
+}
+
+function loadProfile() {
+  const profile = localFormProfile();
+  formProfileFields.forEach((field) => {
+    const input = profileForm.elements.namedItem(field);
+    if (input) input.value = profile[field] || "";
+  });
+}
+
+function routineFormDraftText(fields) {
+  const profile = localFormProfile();
+  return "Suggested form response:\n" + fields.map((field) => {
+    const value = profile[field.key] || "";
+    return `${field.label}: ${value || `[enter your ${field.label.toLowerCase()}]`}`;
+  }).join("\n");
 }
 
 function openApprovalDrawer(trigger = approvalTrigger) {
@@ -301,6 +332,24 @@ reducedMotionSetting.addEventListener("change", () => {
   localStorage.setItem("triage-reduced-motion", String(reducedMotionSetting.checked));
 });
 document.querySelector("#settings-sign-out").addEventListener("click", showLandingScreen);
+profileForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  profileStatus.textContent = "";
+  const submitButton = profileForm.querySelector("button[type='submit']");
+  submitButton.disabled = true;
+  try {
+    const profile = Object.fromEntries(new FormData(profileForm).entries());
+    if (Object.values(profile).some((value) => value.length > 160)) {
+      throw new Error("Each profile value must be 160 characters or fewer.");
+    }
+    localStorage.setItem(formProfileStorageKey, JSON.stringify(profile));
+    profileStatus.textContent = "Saved in this browser only. These values are only used in matching form drafts.";
+  } catch (requestError) {
+    profileStatus.textContent = requestError.message;
+  } finally {
+    submitButton.disabled = false;
+  }
+});
 applyTheme(localStorage.getItem("triage-theme") || "system");
 
 function getScrollableParent(target, stopElement) {
@@ -806,6 +855,29 @@ async function markQueueItemDone(doneButton) {
   }
 }
 
+async function requestFormDraft(draftButton) {
+  draftButton.disabled = true;
+  try {
+    const response = await apiFetch(apiUrl(`/queue/${draftButton.dataset.itemId}/form-draft`), { method: "POST" });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "Could not prepare the form draft.");
+    await loadPendingActions(data.id);
+    const approvalOrigin = detailReturnFocus || draftButton;
+    closeDetailDialog(false);
+    openApprovalDrawer(approvalOrigin);
+  } catch (requestError) {
+    error.textContent = requestError.message;
+    draftButton.disabled = false;
+  }
+}
+
+function looksLikeRoutineFormRequest(text) {
+  const normalized = String(text || "");
+  const hasFormContext = /\b(?:fill|enter|provide|submit|form|details?|fields?)\b/i.test(normalized);
+  const hasSupportedField = /\b(?:full\s+)?name\b|\broll\s*(?:number|no\.?|#)?\b|\b(?:college\s+)?(?:email|e-mail)\b|\b(?:phone|mobile)(?:\s+number)?\b|\b(?:programme|program|course)\b|\b(?:section|class\s+section)\b/i.test(normalized);
+  return hasFormContext && hasSupportedField;
+}
+
 queue.addEventListener("click", async (event) => {
   const trigger = event.target.closest("[data-open-queue-item]");
   if (!trigger) return;
@@ -838,7 +910,7 @@ function openQueueDetail(item, trigger) {
     <h2 id="detail-title">${escapeHtml(item.text)}</h2>
     <p class="detail-reason">${escapeHtml(item.reason)}</p>
     <div class="detail-facts"><div><span>Deadline</span><strong class="deadline${deadlineClass}">${escapeHtml(deadline)}</strong></div><div><span>Requirement</span><strong>${mandatory}</strong></div></div>
-    <div class="detail-actions"><button class="done-button" type="button" data-item-id="${item.id}">Mark done for review</button>${archiveDownloadLink(item.archived_path)}</div>
+    <div class="detail-actions">${looksLikeRoutineFormRequest(item.text) ? `<button class="draft-form-button secondary" type="button" data-item-id="${item.id}">Draft form response</button>` : ""}<button class="done-button" type="button" data-item-id="${item.id}">Mark done for review</button>${archiveDownloadLink(item.archived_path)}</div>
   `, trigger);
 }
 
@@ -862,15 +934,20 @@ detailLayer.addEventListener("click", async (event) => {
   }
   const doneButton = event.target.closest(".done-button");
   if (doneButton) await markQueueItemDone(doneButton);
+  const draftButton = event.target.closest(".draft-form-button");
+  if (draftButton) await requestFormDraft(draftButton);
 });
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && detailLayer.classList.contains("is-open")) closeDetailDialog();
 });
 
 function escapeHtml(value) {
-  const template = document.createElement("template");
-  template.textContent = value;
-  return template.innerHTML;
+  // Text assigned directly to a <template> is not part of its rendered
+  // document fragment in every browser, so template.innerHTML can be empty.
+  // Use a regular detached element to preserve escaped text in card markup.
+  const element = document.createElement("div");
+  element.textContent = String(value ?? "");
+  return element.innerHTML;
 }
 
 function isDeadlineWithin24Hours(deadline) {
@@ -1011,24 +1088,44 @@ function renderPendingActions(actions, highlightedActionId = null) {
     if (second.id === highlightedActionId) return 1;
     return 0;
   });
-  pendingActions.innerHTML = orderedActions.map((action) => `
+  pendingActions.innerHTML = orderedActions.map((action) => {
+    const isFormDraft = action.action_type === "prepare_form_draft";
+    const draftedResponse = action.payload.drafted_response || (isFormDraft ? routineFormDraftText(action.payload.form_fields || []) : "");
+    return `
     <article class="pending-action${action.id === highlightedActionId ? " is-highlighted" : ""}" data-action-id="${action.id}">
       <p class="summary">${escapeHtml(action.payload.message)}</p>
-      <p class="muted">Triage will not make this change until you approve it.</p>
-      ${action.payload.drafted_response ? `
-        <label class="drafted-response-label" for="drafted-response-${action.id}">Draft to copy and send yourself</label>
-        <textarea id="drafted-response-${action.id}" class="drafted-response" rows="3">${escapeHtml(action.payload.drafted_response)}</textarea>
+      <p class="muted">${isFormDraft ? "Review and copy this draft yourself. It will not complete the obligation or submit anything." : "Triage will not make this change until you approve it."}</p>
+      ${draftedResponse ? `
+        <label class="drafted-response-label" for="drafted-response-${action.id}">${isFormDraft ? "Form response to copy and complete yourself" : "Draft to copy and send yourself"}</label>
+        <textarea id="drafted-response-${action.id}" class="drafted-response" rows="3">${escapeHtml(draftedResponse)}</textarea>
         <p class="muted">Editing or approving this draft does not send it anywhere.</p>
+        <button class="copy-draft-button secondary" type="button" data-copy-draft="drafted-response-${action.id}">Copy draft</button>
       ` : ""}
       <div class="pending-buttons">
-        <button class="approve-button" type="button" data-action-id="${action.id}">Approve</button>
+        <button class="approve-button" type="button" data-action-id="${action.id}">${isFormDraft ? "Mark reviewed" : "Approve"}</button>
         <button class="reject-button secondary" type="button" data-action-id="${action.id}">Reject</button>
       </div>
     </article>
-  `).join("");
+  `;
+  }).join("");
 }
 
 pendingActions.addEventListener("click", async (event) => {
+  const copyButton = event.target.closest(".copy-draft-button");
+  if (copyButton) {
+    const textarea = document.querySelector(`#${copyButton.dataset.copyDraft}`);
+    if (!textarea) return;
+    try {
+      await navigator.clipboard.writeText(textarea.value);
+      copyButton.textContent = "Copied";
+      window.setTimeout(() => { copyButton.textContent = "Copy draft"; }, 1600);
+    } catch {
+      textarea.focus();
+      textarea.select();
+      error.textContent = "Select the draft and copy it manually.";
+    }
+    return;
+  }
   const actionButton = event.target.closest(".approve-button, .reject-button");
   if (!actionButton) return;
 

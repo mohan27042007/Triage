@@ -192,6 +192,14 @@ def create_pending_action(
             (item_id, action_type),
         ).fetchone()
         if existing:
+            if action_type == "prepare_form_draft":
+                connection.execute(
+                    "UPDATE pending_actions SET payload = ? WHERE id = ?",
+                    (json.dumps(payload), existing["id"]),
+                )
+                existing = connection.execute(
+                    "SELECT * FROM pending_actions WHERE id = ?", (existing["id"],)
+                ).fetchone()
             return _row_to_pending_action(existing)
 
         cursor = connection.execute(
@@ -229,6 +237,12 @@ def approve_pending_action(action_id: int) -> dict[str, Any] | None:
         ).fetchone()
         if not action:
             return None
+        if action["action_type"] == "prepare_form_draft":
+            connection.execute(
+                "UPDATE pending_actions SET status = 'approved' WHERE id = ?", (action_id,)
+            )
+            updated = connection.execute("SELECT * FROM pending_actions WHERE id = ?", (action_id,)).fetchone()
+            return _row_to_pending_action(updated)
         if action["action_type"] != "mark_done":
             raise ValueError(f"Unsupported pending action: {action['action_type']}")
 

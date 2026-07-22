@@ -118,27 +118,61 @@ def classify(text: str) -> dict[str, Any]:
     return result
 
 
+ROUTINE_FORM_FIELDS: tuple[tuple[str, str, str], ...] = (
+    ("full_name", "Name", r"\b(?:full\s+)?name\b"),
+    ("roll_number", "Roll number", r"\broll\s*(?:number|no\.?|#)?\b"),
+    ("college_email", "College email", r"\b(?:college\s+)?(?:email|e-mail)\b"),
+    ("phone_number", "Phone number", r"\b(?:phone|mobile)(?:\s+number)?\b"),
+    ("programme", "Programme", r"\b(?:programme|program|course)\b"),
+    ("section", "Section", r"\b(?:section|class\s+section)\b"),
+)
+
+
+def extract_routine_form_fields(text: str) -> list[dict[str, str]]:
+    """Return only explicit, allow-listed fields from a simple form request.
+
+    This intentionally uses deterministic matching instead of an AI-generated profile
+    guess. A generic mention of a name or course is not enough: the message must also
+    contain form-entry context such as "fill", "enter", or "form".
+    """
+    normalized = " ".join(text.split())
+    if not re.search(r"\b(?:fill|enter|provide|submit|form|details?|fields?)\b", normalized, re.IGNORECASE):
+        return []
+
+    fields: list[dict[str, str]] = []
+    for key, label, pattern in ROUTINE_FORM_FIELDS:
+        if re.search(pattern, normalized, re.IGNORECASE):
+            fields.append({"key": key, "label": label})
+    return fields
+
+
+def draft_routine_form_response(text: str, profile: dict[str, str] | None = None) -> dict[str, Any] | None:
+    """Build a copy-only field template with known local profile values when present."""
+    fields = extract_routine_form_fields(text)
+    if not fields:
+        return None
+
+    profile = profile or {}
+    drafted_fields: list[dict[str, Any]] = []
+    lines: list[str] = []
+    for field in fields:
+        value = profile.get(field["key"], "").strip()
+        drafted_fields.append({**field, "value": value, "autofilled": bool(value)})
+        lines.append(f"{field['label']}: {value or f'[enter your {field['label'].lower()}]'}")
+    return {
+        "drafted_response": "Suggested form response:\n" + "\n".join(lines),
+        "fields": drafted_fields,
+    }
+
+
 def draft_poll_or_form_response(text: str) -> str | None:
-    """Create a conservative, copy-only response draft from explicit message wording."""
+    """Create a conservative, copy-only completion-poll response draft."""
     normalized = " ".join(text.split())
     completion_reply = re.search(r"\breply\s+(yes|no|done|completed)\b", normalized, re.IGNORECASE)
     if completion_reply:
         response = completion_reply.group(1).upper()
         return f"Suggested reply: {response}, completed"
 
-    field_labels: list[str] = []
-    for label, pattern in (
-        ("Name", r"\b(?:full\s+)?name\b"),
-        ("Roll number", r"\broll\s*(?:number|no\.?|#)?\b"),
-        ("Email", r"\b(?:email|e-mail)\b"),
-        ("Phone number", r"\b(?:phone|mobile)(?:\s+number)?\b"),
-    ):
-        if re.search(pattern, normalized, re.IGNORECASE):
-            field_labels.append(label)
-    if field_labels:
-        return "Suggested form response:\n" + "\n".join(
-            f"{label}: [enter your {label.lower()}]" for label in field_labels
-        )
     return None
 
 

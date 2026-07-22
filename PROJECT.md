@@ -20,7 +20,7 @@ Triage triages incoming academic information into three structured categories:
 
 Obligations are grouped into **Immediate**, **This Week**, and **Later**, with explicit deadlines and requirement status. Study material becomes a ranked outline generated from question-bank and unit-note text. Assignment help is deliberately limited to requirements, concepts, approach steps, and test cases.
 
-The key safety mechanism is Human Review. Triage can draft a copy-only response for a completion poll or routine form, but it does not send it, submit a form, or invent a student's personal details. The student can edit and copy the draft themselves; approving an action only updates Triage's local record.
+The key safety mechanism is Human Review. Triage can draft a copy-only response for a completion poll or routine form, but it does not send it, submit a form, or invent a student's personal details. Students may save optional details in their browser—such as their name or roll number—which are deterministically matched only to explicit supported fields in a form draft. Those details never leave the browser. The student can edit and copy the draft themselves; reviewing a form draft does not mark an obligation complete.
 
 ## Current implementation
 
@@ -35,7 +35,7 @@ The key safety mechanism is Human Review. Triage can draft a copy-only response 
 ### Student desk
 
 - Action Queue with urgency grouping, compact cards, detail dialogs, deadline reminders, and local mark-done requests.
-- Approval Drawer with editable poll/form response drafts and explicit no-send language.
+- Approval Drawer with editable poll/form response drafts, browser-local form details, and explicit no-send language.
 - Ranked Study Plan with expandable topic outlines.
 - Assignment Scaffolding with requirements, concepts, approach, and test cases—never a complete submission.
 - Shared demo-password gate, keyboard/arrow navigation, a pulse-inspired rail, theme selection, and reduced-motion support.
@@ -76,7 +76,7 @@ Codex was the primary engineering collaborator for this solo build. It helped tr
 3. Add robust connection health, retry states, source search, and archive/history views.
 4. Extend attachment handling beyond UTF-8 text uploads.
 5. Investigate a reliable, policy-compliant WhatsApp integration without compromising the stable demo path.
-6. Add user-provided profile fields for routine-form drafts, always reviewable and never auto-submitted.
+6. Add more supported routine-form fields only after confirming their privacy and review requirements.
 
 ## Demo path
 

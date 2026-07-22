@@ -12,7 +12,7 @@ Triage is a local-first AI student desk for scattered academic communication. It
 - Structured OpenAI classification with category, evidence-based reason, explicit deadline, mandatory/optional status, and poll/form detection.
 - Action Queue grouped into **Immediate**, **This Week**, and **Later**.
 - Detail dialogs and a review-first **Mark done** workflow.
-- Approval Drawer with editable copy-only drafts for completion polls and routine forms. Approving changes only the local Triage item; it never sends a WhatsApp message or posts a form.
+- Approval Drawer with editable copy-only drafts for completion polls and routine forms. Optional profile details stay in the student's browser and are matched only to explicit, allow-listed form fields; Triage never invents a value or submits anything externally.
 - Study Plan that ranks topics from a question bank and unit notes, with topic outlines rather than generated answers.
 - Assignment Scaffolding that returns requirements, concepts, an approach, and test cases—not a submittable solution.
 - Local, read-only Gmail and Google Classroom sync after Google OAuth setup.
@@ -26,6 +26,7 @@ Triage is intentionally review-first:
 
 - It does **not** submit forms, send WhatsApp messages, post replies, or make external changes.
 - It does **not** invent personal details for form fields.
+- Routine form drafts use only details the student explicitly saves in their browser and only for matching supported labels; those details are never sent to the API or classifier.
 - It does **not** produce complete academic submissions. Assignment help is planning and self-checking support only.
 - Gmail and Classroom access is read-only and is currently supported through the local OAuth workflow.
 
@@ -112,6 +113,7 @@ All endpoints except `GET /health` and `POST /auth/login` require the demo beare
 | `POST /ingest` | Classifies pasted JSON text or an uploaded UTF-8 `.txt` file. |
 | `GET /queue` | Returns open obligations grouped by urgency. |
 | `POST /queue/{id}/done` | Creates a pending mark-done review action. |
+| `POST /queue/{id}/form-draft` | Creates a copy-only routine-form draft without marking the item done. |
 | `GET /pending` | Lists actions awaiting Human Review. |
 | `POST /pending/{id}/approve` | Applies an approved local action. |
 | `POST /pending/{id}/reject` | Rejects a pending action without changing the item. |
