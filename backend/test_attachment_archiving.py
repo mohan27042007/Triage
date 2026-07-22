@@ -93,6 +93,13 @@ def main() -> None:
             source_id="attachment-test",
         )
         assert item is not None and item["attachments"] == attachments
+        newest = database.create_item(
+            "A later manual item.",
+            {"category": "Noise", "reason": "Test", "deadline": None, "mandatory": False},
+            source="manual",
+        )
+        assert newest is not None
+        assert database.get_recent_items()[0]["id"] == newest["id"]
         listed = database.get_archived_attachments()
         assert len(listed) == 1 and listed[0]["archived_path"] == attachments[0]["archived_path"]
         del item, listed

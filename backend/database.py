@@ -175,6 +175,17 @@ def get_open_obligations() -> list[dict[str, Any]]:
     return [_row_to_item(row) for row in rows]
 
 
+def get_recent_items(limit: int = 60) -> list[dict[str, Any]]:
+    """Return the newest classified items from every supported source."""
+    if not 1 <= limit <= 100:
+        raise ValueError("Stream limit must be between 1 and 100.")
+    with _connection() as connection:
+        rows = connection.execute(
+            "SELECT * FROM items ORDER BY created_at DESC, id DESC LIMIT ?", (limit,)
+        ).fetchall()
+    return [_row_to_item(row) for row in rows]
+
+
 def get_archived_attachments() -> list[dict[str, Any]]:
     """Return metadata for locally archived source and upload files, newest first."""
     entries: list[dict[str, Any]] = []

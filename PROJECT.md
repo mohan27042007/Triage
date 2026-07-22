@@ -29,6 +29,7 @@ The key safety mechanism is Human Review. Triage can draft a copy-only response 
 - Manual text paste and UTF-8 `.txt` uploads.
 - Read-only Gmail and Google Classroom sync in the local OAuth setup.
 - Clearly marked representative WhatsApp demo data, not a live WhatsApp connection.
+- A unified source-labelled stream of recently classified items, refreshed by the open browser every 30 seconds.
 - OpenAI structured-output classification with category, reason, deadline, mandatory status, and poll/form detection.
 - SQLite persistence, source IDs for deduplication, and a local attachment archive: uploaded text files, newly synced Gmail attachments, and accessible Classroom Drive files are retained up to 20 MB each and remain downloadable.
 
@@ -73,7 +74,7 @@ Codex was the primary engineering collaborator for this solo build. It helped tr
 
 1. Add per-user hosted Google OAuth and durable account/session storage.
 2. Move from SQLite/local archives to managed storage and object storage.
-3. Add robust connection health, retry states, source search, and archive/history views.
+3. Add real-time source webhooks where available, robust connection health, retry states, source search, and a fuller archive/history view.
 4. Add durable object storage, virus scanning, retention controls, and broader file preview support for the local attachment archive.
 5. Investigate a reliable, policy-compliant WhatsApp integration without compromising the stable demo path.
 6. Add more supported routine-form fields only after confirming their privacy and review requirements.

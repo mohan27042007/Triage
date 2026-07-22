@@ -38,6 +38,7 @@ from database import (
     get_assignment_history,
     get_archived_attachments,
     get_open_obligations,
+    get_recent_items,
     get_pending_actions,
     get_study_plan,
     initialize_database,
@@ -160,6 +161,12 @@ def queue() -> dict[str, list[dict]]:
     for item in get_open_obligations():
         grouped[_queue_group(item)].append(item)
     return grouped
+
+
+@app.get("/stream")
+def stream() -> dict[str, list[dict]]:
+    """Return the latest classified items across manual and connected sources."""
+    return {"items": get_recent_items()}
 
 
 @app.get("/sources/google/status")

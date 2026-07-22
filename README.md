@@ -9,6 +9,7 @@ Triage is a local-first AI student desk for scattered academic communication. It
 ## What is implemented
 
 - Paste text or upload UTF-8 `.txt` files for classification.
+- A unified, source-labelled live stream of recently classified Gmail, Classroom, manual-upload, and WhatsApp-demo items. It refreshes every 30 seconds while the app tab is open; this is local polling, not a webhook feed.
 - Structured OpenAI classification with category, evidence-based reason, explicit deadline, mandatory/optional status, and poll/form detection.
 - Action Queue grouped into **Immediate**, **This Week**, and **Later**.
 - Detail dialogs and a review-first **Mark done** workflow.
@@ -112,6 +113,7 @@ All endpoints except `GET /health` and `POST /auth/login` require the demo beare
 | `POST /auth/login` | Exchanges the shared demo password for an in-memory token. |
 | `POST /ingest` | Classifies pasted JSON text or an uploaded UTF-8 `.txt` file. |
 | `GET /queue` | Returns open obligations grouped by urgency. |
+| `GET /stream` | Returns the newest classified items across all available sources. |
 | `POST /queue/{id}/done` | Creates a pending mark-done review action. |
 | `POST /queue/{id}/form-draft` | Creates a copy-only routine-form draft without marking the item done. |
 | `GET /pending` | Lists actions awaiting Human Review. |

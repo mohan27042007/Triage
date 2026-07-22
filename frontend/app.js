@@ -13,6 +13,7 @@ const connectedSourcesList = document.querySelector("#connected-sources-list");
 const connectedSourcesToggle = document.querySelector("#connected-sources-toggle");
 const queue = document.querySelector("#queue");
 const refreshQueueButton = document.querySelector("#refresh-queue");
+const streamList = document.querySelector("#stream-list");
 const archiveList = document.querySelector("#archive-list");
 const refreshArchiveButton = document.querySelector("#refresh-archive");
 const studyForm = document.querySelector("#study-form");
@@ -61,12 +62,14 @@ let requestedPanelIndex = null;
 let panelSettleTimer = null;
 let detailReturnFocus = null;
 let queueItemsById = new Map();
+let streamItemsById = new Map();
 let studyTopics = [];
 let authToken = localStorage.getItem("triage-demo-token");
 let drawerTrigger = null;
 let deadlineRemindersEnabled = localStorage.getItem("triage-deadline-reminders") !== "false";
 let currentUrgentItems = [];
 let reminderPollingTimer = null;
+let streamPollingTimer = null;
 const reminderNotificationsStorageKey = "triage-notified-deadline-reminders";
 const reminderSnoozesStorageKey = "triage-deadline-reminder-snoozes";
 const reminderCheckIntervalMs = 5 * 60 * 1000;
@@ -158,6 +161,7 @@ async function apiFetch(url, options = {}) {
 
 function loadAppData() {
   loadQueue();
+  loadStream();
   loadStudyPlan();
   loadPendingActions();
   loadAssignmentHistory();
@@ -171,12 +175,16 @@ function startDeadlineReminderPolling() {
   reminderPollingTimer = window.setInterval(() => {
     if (authToken && !document.hidden) loadQueue();
   }, reminderCheckIntervalMs);
+  streamPollingTimer = window.setInterval(() => {
+    if (authToken && !document.hidden) loadStream();
+  }, 30 * 1000);
 }
 
 function stopDeadlineReminderPolling() {
-  if (!reminderPollingTimer) return;
-  window.clearInterval(reminderPollingTimer);
+  if (reminderPollingTimer) window.clearInterval(reminderPollingTimer);
   reminderPollingTimer = null;
+  if (streamPollingTimer) window.clearInterval(streamPollingTimer);
+  streamPollingTimer = null;
 }
 
 function localFormProfile() {
@@ -601,6 +609,7 @@ form.addEventListener("submit", async (event) => {
     playClassificationTravel(data.category).then(() => {
       if (data.category === "Obligation") loadQueue();
       loadArchive();
+      loadStream();
     });
   } catch (requestError) {
     error.textContent = requestError.message;
@@ -722,6 +731,7 @@ async function connectSource(sourceKey) {
     connectedSources[sourceKey] = { connected: true, lastSynced: new Date().toISOString() };
     saveConnectedSources();
     await loadQueue();
+    await loadStream();
     await loadArchive();
   } catch (requestError) {
     connectedSources[sourceKey] = { ...connectedSources[sourceKey], connected: false, error: requestError.message };
@@ -733,6 +743,59 @@ async function connectSource(sourceKey) {
 }
 
 refreshQueueButton.addEventListener("click", loadQueue);
+
+function sourceLabel(source) {
+  return {
+    gmail: "Gmail",
+    classroom: "Classroom",
+    manual: "Manual upload",
+    "whatsapp-demo": "WhatsApp demo",
+  }[source] || "Triage";
+}
+
+function streamTimestamp(value) {
+  const timestamp = new Date(value);
+  if (Number.isNaN(timestamp.getTime())) return "Just now";
+  return timestamp.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function streamSummary(item) {
+  const normalized = String(item.text || "").replace(/\s+/g, " ").trim();
+  return normalized.length > 132 ? `${normalized.slice(0, 132)}…` : normalized;
+}
+
+async function loadStream() {
+  if (!streamList.children.length) streamList.innerHTML = '<p class="muted">Loading incoming items…</p>';
+  try {
+    const response = await apiFetch(apiUrl("/stream"));
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "Could not load the unified stream.");
+    const items = data.items || [];
+    streamItemsById = new Map(items.map((item) => [String(item.id), item]));
+    if (!items.length) {
+      streamList.innerHTML = '<p class="empty-state">No classified items yet. Paste a message or sync a local source.</p>';
+      return;
+    }
+    streamList.innerHTML = items.slice(0, 12).map((item) => `
+      <article class="stream-item stream-item-${escapeHtml(item.category.toLowerCase().replace(/\s+/g, "-"))}">
+        <button type="button" class="stream-item-trigger" data-open-stream-item="${item.id}" aria-label="Open ${escapeHtml(streamSummary(item))}">
+          <span class="stream-item-topline"><span class="stream-source">${escapeHtml(sourceLabel(item.source))}</span><span class="stream-time">${escapeHtml(streamTimestamp(item.created_at))}</span></span>
+          <span class="stream-item-summary">${escapeHtml(streamSummary(item))}</span>
+          <span class="stream-item-footer"><span class="badge ${escapeHtml(item.category.toLowerCase().replace(/\s+/g, "-"))}">${escapeHtml(item.category)}</span><span>View →</span></span>
+        </button>
+      </article>
+    `).join("");
+  } catch (requestError) {
+    streamList.innerHTML = `<p class="error">${escapeHtml(requestError.message)}</p>`;
+  }
+}
+
+streamList.addEventListener("click", (event) => {
+  const trigger = event.target.closest("[data-open-stream-item]");
+  if (!trigger) return;
+  const item = streamItemsById.get(trigger.dataset.openStreamItem);
+  if (item) openStreamDetail(item, trigger);
+});
 
 async function loadQueue() {
   queue.innerHTML = "<p class=\"muted\">Loading queue…</p>";
@@ -1045,6 +1108,20 @@ function openQueueDetail(item, trigger) {
   `, trigger);
 }
 
+function openStreamDetail(item, trigger) {
+  const deadline = item.deadline || "No explicit deadline";
+  const destination = item.category === "Obligation" && item.status === "open"
+    ? '<button class="stream-queue-button secondary" type="button" data-stream-destination="queue">Open in Action Queue</button>'
+    : "";
+  openDetailDialog(`
+    <p class="eyebrow">${escapeHtml(sourceLabel(item.source))} / UNIFIED STREAM</p>
+    <h2 id="detail-title">${escapeHtml(item.text)}</h2>
+    <p class="detail-reason">${escapeHtml(item.reason)}</p>
+    <div class="detail-facts"><div><span>Classification</span><strong>${escapeHtml(item.category)}</strong></div><div><span>Received</span><strong>${escapeHtml(streamTimestamp(item.created_at))}</strong></div><div><span>Deadline</span><strong>${escapeHtml(deadline)}</strong></div><div><span>Status</span><strong>${escapeHtml(item.status)}</strong></div></div>
+    <div class="detail-actions">${destination}${itemArchiveLinks(item)}</div>
+  `, trigger);
+}
+
 function openStudyDetail(item, trigger) {
   openDetailDialog(`
     <p class="eyebrow">STUDY PLAN</p>
@@ -1067,6 +1144,11 @@ detailLayer.addEventListener("click", async (event) => {
   if (doneButton) await markQueueItemDone(doneButton);
   const draftButton = event.target.closest(".draft-form-button");
   if (draftButton) await requestFormDraft(draftButton);
+  const destination = event.target.closest("[data-stream-destination]");
+  if (destination) {
+    closeDetailDialog(false);
+    scrollToSection(destination.dataset.streamDestination);
+  }
 });
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && detailLayer.classList.contains("is-open")) closeDetailDialog();
