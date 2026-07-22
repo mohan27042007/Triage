@@ -31,6 +31,11 @@ const detailLayer = document.querySelector("#detail-layer");
 const detailDialog = document.querySelector("#detail-dialog");
 const detailContent = document.querySelector("#detail-content");
 const detailClose = document.querySelector("#detail-close");
+const commandLayer = document.querySelector("#command-layer");
+const commandPalette = document.querySelector("#command-palette");
+const commandQuery = document.querySelector("#command-query");
+const commandResults = document.querySelector("#command-results");
+const closeCommandButton = document.querySelector("#close-command");
 const assignmentForm = document.querySelector("#assignment-form");
 const assignmentPrompt = document.querySelector("#assignment-prompt");
 const assignmentError = document.querySelector("#assignment-error");
@@ -67,6 +72,9 @@ let detailReturnFocus = null;
 let queueItemsById = new Map();
 let streamItemsById = new Map();
 let historyItemsById = new Map();
+let commandMatches = [];
+let commandActiveIndex = 0;
+let commandReturnFocus = null;
 let studyTopics = [];
 let authToken = localStorage.getItem("triage-demo-token");
 let drawerTrigger = null;
@@ -130,6 +138,60 @@ function closeSettingsDrawer() {
   settingsMenu.setAttribute("aria-hidden", "true");
   settingsFab.setAttribute("aria-expanded", "false");
   settingsMenu.classList.remove("is-open");
+}
+
+function commandCandidates() {
+  const navigation = [
+    ["Stream / Ingest", "Go to the incoming stream and ingest", () => scrollToSection("stream")],
+    ["Action Queue", "Go to open obligations", () => scrollToSection("queue")],
+    ["Study Plan", "Go to ranked study topics", () => scrollToSection("study")],
+    ["Assignment Scaffold", "Go to assignment planning", () => scrollToSection("assignment")],
+    ["Archive / History", "Search previously classified items", () => scrollToSection("history")],
+    ["Human Review", "Open pending review actions", () => openApprovalDrawer()],
+    ["App settings", "Open notification and motion settings", () => openSettingsView("app")],
+  ];
+  const itemCommands = [...historyItemsById.values(), ...streamItemsById.values()]
+    .filter((item, index, items) => items.findIndex((candidate) => candidate.id === item.id) === index)
+    .slice(0, 24)
+    .map((item) => [streamSummary(item), `${sourceLabel(item.source)} · ${item.category}`, () => openStreamDetail(item, panelScroller, "COMMAND PALETTE")]);
+  return [...navigation, ...itemCommands];
+}
+
+function renderCommandResults() {
+  const query = commandQuery.value.trim().toLowerCase();
+  commandMatches = commandCandidates().filter(([label, description]) =>
+    !query || `${label} ${description}`.toLowerCase().includes(query),
+  );
+  commandActiveIndex = Math.min(commandActiveIndex, Math.max(commandMatches.length - 1, 0));
+  commandResults.innerHTML = commandMatches.length ? commandMatches.map(([label, description], index) => `
+    <button class="command-result${index === commandActiveIndex ? " is-active" : ""}" type="button" role="option" aria-selected="${index === commandActiveIndex}" data-command-index="${index}"><span>${escapeHtml(label)}</span><small>${escapeHtml(description)}</small></button>
+  `).join("") : '<p class="empty-state">No local command or item matches.</p>';
+}
+
+function openCommandPalette(trigger = document.activeElement) {
+  if (!authToken || commandLayer.classList.contains("is-open")) return;
+  commandReturnFocus = trigger instanceof HTMLElement ? trigger : null;
+  commandLayer.classList.add("is-open");
+  commandLayer.setAttribute("aria-hidden", "false");
+  commandQuery.value = "";
+  commandActiveIndex = 0;
+  renderCommandResults();
+  commandQuery.focus();
+}
+
+function closeCommandPalette(returnFocus = true) {
+  if (!commandLayer.classList.contains("is-open")) return;
+  commandLayer.classList.remove("is-open");
+  commandLayer.setAttribute("aria-hidden", "true");
+  if (returnFocus && commandReturnFocus?.isConnected) commandReturnFocus.focus();
+  commandReturnFocus = null;
+}
+
+function runCommand(index) {
+  const command = commandMatches[index];
+  if (!command) return;
+  closeCommandPalette(false);
+  command[2]();
 }
 
 function openSettingsView(viewName) {
@@ -354,6 +416,16 @@ closeSettingsButton.addEventListener("click", () => {
   settingsDrawer.setAttribute("aria-hidden", "true");
   settingsDrawer.classList.remove("is-open");
 });
+commandQuery.addEventListener("input", () => {
+  commandActiveIndex = 0;
+  renderCommandResults();
+});
+commandResults.addEventListener("click", (event) => {
+  const result = event.target.closest("[data-command-index]");
+  if (result) runCommand(Number(result.dataset.commandIndex));
+});
+closeCommandButton.addEventListener("click", closeCommandPalette);
+commandLayer.querySelector("[data-close-command]").addEventListener("click", closeCommandPalette);
 document.querySelectorAll("[data-theme-choice]").forEach((button) => button.addEventListener("click", () => applyTheme(button.dataset.themeChoice)));
 deadlineRemindersSetting.checked = deadlineRemindersEnabled;
 deadlineRemindersSetting.addEventListener("change", () => {
@@ -510,6 +582,42 @@ panelScroller.addEventListener("scroll", () => {
 panelScroller.addEventListener("scrollend", settlePanelNavigation);
 
 document.addEventListener("keydown", (event) => {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+    event.preventDefault();
+    if (commandLayer.classList.contains("is-open")) closeCommandPalette();
+    else openCommandPalette();
+    return;
+  }
+  if (commandLayer.classList.contains("is-open")) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeCommandPalette();
+    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (commandMatches.length) {
+        commandActiveIndex = (commandActiveIndex + (event.key === "ArrowDown" ? 1 : -1) + commandMatches.length) % commandMatches.length;
+        renderCommandResults();
+      }
+    } else if (event.key === "Enter" && document.activeElement === commandQuery) {
+      event.preventDefault();
+      runCommand(commandActiveIndex);
+    } else if (event.key === "Tab") {
+      const focusable = [...commandPalette.querySelectorAll("button:not([disabled]), input:not([disabled])")];
+      const currentIndex = focusable.indexOf(document.activeElement);
+      if (event.shiftKey && currentIndex === 0) {
+        event.preventDefault();
+        focusable.at(-1)?.focus();
+      } else if (!event.shiftKey && currentIndex === focusable.length - 1) {
+        event.preventDefault();
+        focusable[0]?.focus();
+      }
+    }
+    return;
+  }
+  if (event.key === "Escape" && settingsDrawer.classList.contains("is-open")) {
+    closeSettingsDrawer();
+    return;
+  }
   if (
     event.key !== "ArrowLeft" &&
     event.key !== "ArrowRight" ||

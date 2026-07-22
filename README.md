@@ -20,7 +20,7 @@ Triage is a local-first AI student desk for scattered academic communication. It
 - Local, read-only Gmail and Google Classroom sync after Google OAuth setup.
 - Clearly labelled representative WhatsApp demo data; there is no live WhatsApp integration.
 - Local archiving and authenticated download of uploaded `.txt` files plus newly synced Gmail attachments and accessible Classroom Drive files (up to 20 MB each).
-- Shared demo-password gate, in-memory sessions, in-app deadline reminders with per-item snooze and optional browser notifications, keyboard/pulse-rail navigation, theme controls, and reduced-motion support.
+- Shared demo-password gate, in-memory sessions, in-app deadline reminders with per-item snooze and optional browser notifications, keyboard/pulse-rail navigation, a `Ctrl/Cmd + K` command palette, theme controls, and reduced-motion support.
 
 ## Product boundaries
 
@@ -170,6 +170,12 @@ Suggested reply: YES, completed
 ```
 
 Editing or approving this draft does not send it anywhere.
+
+## Keyboard and accessibility
+
+- Press `Ctrl+K` (Windows/Linux) or `Cmd+K` (macOS) after signing in to open the local command palette. Search panel names, common local actions, or recently loaded items; use arrow keys and Enter to select.
+- Arrow keys move between dashboard panels when focus is not inside a form control. Escape closes the command palette, detail dialog, approval drawer, or settings drawer.
+- The app supports system/light/dark themes and a persistent reduced-motion preference.
 
 ## Data safety
 
