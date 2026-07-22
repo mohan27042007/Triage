@@ -18,7 +18,7 @@ Triage is a local-first AI student desk for scattered academic communication. It
 - Local, read-only Gmail and Google Classroom sync after Google OAuth setup.
 - Clearly labelled representative WhatsApp demo data; there is no live WhatsApp integration.
 - Local archiving and authenticated download of uploaded `.txt` files.
-- Shared demo-password gate, in-memory sessions, deadline reminders, keyboard/pulse-rail navigation, theme controls, and reduced-motion support.
+- Shared demo-password gate, in-memory sessions, in-app deadline reminders with per-item snooze and optional browser notifications, keyboard/pulse-rail navigation, theme controls, and reduced-motion support.
 
 ## Product boundaries
 
@@ -139,6 +139,8 @@ CORS_ORIGINS=https://triage-27.vercel.app
 Set Vercel's public `TRIAGE_API_BASE_URL` to the Railway API URL. Never expose `OPENAI_API_KEY` or `DEMO_PASSWORD` in Vercel.
 
 The current hosted backend uses SQLite, a local archive directory, and in-memory sessions. Data and sessions may not survive a redeploy or restart. Google OAuth remains local-only: do not upload `credentials.json` or `token.json` to Railway. A production version needs per-user web OAuth, durable storage, and object storage for archives.
+
+Deadline reminders are browser-local: Triage refreshes the open queue every five minutes while the tab is open, shows due-soon items within 24 hours, and can send browser notifications only after the student explicitly enables them. It does not send email, text messages, or background push notifications after the browser is closed.
 
 ## How Codex was used
 

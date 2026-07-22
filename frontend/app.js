@@ -7,6 +7,7 @@ const button = form.querySelector("button");
 const deadlineReminder = document.querySelector("#deadline-reminder");
 const deadlineReminderText = document.querySelector("#deadline-reminder-text");
 const deadlineReminderNavigate = document.querySelector("#deadline-reminder-navigate");
+const deadlineReminderSnooze = document.querySelector("#deadline-reminder-snooze");
 const deadlineReminderDismiss = document.querySelector("#deadline-reminder-dismiss");
 const connectedSourcesList = document.querySelector("#connected-sources-list");
 const connectedSourcesToggle = document.querySelector("#connected-sources-toggle");
@@ -49,6 +50,8 @@ const closeSettingsButton = document.querySelector("#close-settings");
 const profileForm = document.querySelector("#profile-form");
 const profileStatus = document.querySelector("#profile-status");
 const deadlineRemindersSetting = document.querySelector("#deadline-reminders-setting");
+const enableDeadlineNotifications = document.querySelector("#enable-deadline-notifications");
+const deadlineNotificationStatus = document.querySelector("#deadline-notification-status");
 const reducedMotionSetting = document.querySelector("#reduced-motion-setting");
 let wheelNavigationLocked = false;
 let activePanelIndex = 0;
@@ -59,11 +62,12 @@ let queueItemsById = new Map();
 let studyTopics = [];
 let authToken = localStorage.getItem("triage-demo-token");
 let drawerTrigger = null;
-let deadlineReminderDismissed = false;
 let deadlineRemindersEnabled = localStorage.getItem("triage-deadline-reminders") !== "false";
 let currentUrgentItems = [];
-const notifiedUrgentItemIds = new Set();
-const notificationRequestStorageKey = "triage-reminder-notification-requested";
+let reminderPollingTimer = null;
+const reminderNotificationsStorageKey = "triage-notified-deadline-reminders";
+const reminderSnoozesStorageKey = "triage-deadline-reminder-snoozes";
+const reminderCheckIntervalMs = 5 * 60 * 1000;
 const formProfileStorageKey = "triage-form-profile";
 const formProfileFields = ["full_name", "roll_number", "college_email", "phone_number", "programme", "section"];
 const apiBaseUrl = (window.TRIAGE_API_BASE_URL || "http://localhost:8000").replace(/\/$/, "");
@@ -85,6 +89,7 @@ function apiUrl(path) {
 }
 
 function showLoginScreen() {
+  stopDeadlineReminderPolling();
   authToken = null;
   localStorage.removeItem("triage-demo-token");
   landingScreen.hidden = true;
@@ -94,6 +99,7 @@ function showLoginScreen() {
 }
 
 function showLandingScreen() {
+  stopDeadlineReminderPolling();
   authToken = null;
   localStorage.removeItem("triage-demo-token");
   landingScreen.hidden = false;
@@ -106,6 +112,7 @@ function showApp() {
   landingScreen.hidden = true;
   loginScreen.hidden = true;
   appShell.hidden = false;
+  startDeadlineReminderPolling();
 }
 
 function closeSettingsDrawer() {
@@ -154,6 +161,19 @@ function loadAppData() {
   loadAssignmentHistory();
   loadConnectedSourcesPanel();
   loadProfile();
+}
+
+function startDeadlineReminderPolling() {
+  if (reminderPollingTimer) return;
+  reminderPollingTimer = window.setInterval(() => {
+    if (authToken && !document.hidden) loadQueue();
+  }, reminderCheckIntervalMs);
+}
+
+function stopDeadlineReminderPolling() {
+  if (!reminderPollingTimer) return;
+  window.clearInterval(reminderPollingTimer);
+  reminderPollingTimer = null;
 }
 
 function localFormProfile() {
@@ -324,6 +344,12 @@ deadlineRemindersSetting.addEventListener("change", () => {
   deadlineRemindersEnabled = deadlineRemindersSetting.checked;
   localStorage.setItem("triage-deadline-reminders", String(deadlineRemindersEnabled));
   if (!deadlineRemindersEnabled) deadlineReminder.hidden = true;
+  else updateDeadlineReminder(currentUrgentItems);
+});
+enableDeadlineNotifications.addEventListener("click", requestReminderNotifications);
+updateDeadlineNotificationStatus();
+document.addEventListener("visibilitychange", () => {
+  if (authToken && !document.hidden) loadQueue();
 });
 reducedMotionSetting.checked = localStorage.getItem("triage-reduced-motion") === "true";
 document.documentElement.dataset.reducedMotion = String(reducedMotionSetting.checked);
@@ -737,21 +763,47 @@ function updateDeadlineReminder(immediateItems) {
 
   currentUrgentItems = urgentItems.map(({ item }) => item);
   notifyNewUrgentItems(currentUrgentItems);
-  if (!deadlineRemindersEnabled || deadlineReminderDismissed || !urgentItems.length) {
+  const visibleItems = currentUrgentItems.filter((item) => !isReminderSnoozed(item));
+  if (!deadlineRemindersEnabled || !visibleItems.length) {
     deadlineReminder.hidden = true;
     return;
   }
 
-  const nearest = urgentItems[0].item.deadline;
-  const count = urgentItems.length;
+  const nearest = visibleItems[0].deadline;
+  const count = visibleItems.length;
   deadlineReminderText.textContent = `You have ${count} item${count === 1 ? "" : "s"} due soon — nearest: ${nearest}.`;
   deadlineReminder.hidden = false;
 }
 
+function storedReminderMap(storageKey) {
+  try {
+    const stored = JSON.parse(localStorage.getItem(storageKey) || "{}");
+    return stored && typeof stored === "object" ? stored : {};
+  } catch {
+    return {};
+  }
+}
+
+function deadlineReminderKey(item) {
+  return `${item.id}:${item.deadline || "no-deadline"}`;
+}
+
+function isReminderSnoozed(item) {
+  const snoozes = storedReminderMap(reminderSnoozesStorageKey);
+  const until = Number(snoozes[deadlineReminderKey(item)] || 0);
+  return until > Date.now();
+}
+
 function notifyNewUrgentItems(urgentItems) {
   if (!("Notification" in window) || Notification.permission !== "granted") return;
-  const newlyDetected = urgentItems.filter((item) => !notifiedUrgentItemIds.has(item.id));
-  newlyDetected.forEach((item) => notifiedUrgentItemIds.add(item.id));
+  const notified = storedReminderMap(reminderNotificationsStorageKey);
+  const newlyDetected = urgentItems.filter((item) => {
+    const key = deadlineReminderKey(item);
+    if (notified[key]) return false;
+    notified[key] = Date.now();
+    return true;
+  });
+  localStorage.setItem(reminderNotificationsStorageKey, JSON.stringify(notified));
   if (!newlyDetected.length) return;
 
   const nearest = [...newlyDetected].sort((first, second) => parseDeadline(first.deadline) - parseDeadline(second.deadline))[0];
@@ -765,32 +817,62 @@ function notifyNewUrgentItems(urgentItems) {
 }
 
 function requestReminderNotifications() {
-  if (
-    !("Notification" in window) ||
-    Notification.permission !== "default" ||
-    localStorage.getItem(notificationRequestStorageKey)
-  ) return;
-  localStorage.setItem(notificationRequestStorageKey, "true");
+  if (!("Notification" in window)) {
+    deadlineNotificationStatus.textContent = "This browser does not support notifications.";
+    return;
+  }
+  if (Notification.permission !== "default") {
+    updateDeadlineNotificationStatus();
+    return;
+  }
   try {
     const permissionRequest = Notification.requestPermission();
     if (permissionRequest?.then) {
       permissionRequest.then((permission) => {
+        updateDeadlineNotificationStatus();
         if (permission === "granted") notifyNewUrgentItems(currentUrgentItems);
       }).catch(() => {});
     }
   } catch {
-    // Notification permission is an optional enhancement.
+    deadlineNotificationStatus.textContent = "Notification permission could not be requested.";
   }
 }
 
+function updateDeadlineNotificationStatus() {
+  if (!("Notification" in window)) {
+    enableDeadlineNotifications.disabled = true;
+    deadlineNotificationStatus.textContent = "This browser does not support notifications.";
+    return;
+  }
+  const permission = Notification.permission;
+  enableDeadlineNotifications.disabled = permission !== "default";
+  deadlineNotificationStatus.textContent = permission === "granted"
+    ? "Browser notifications are enabled for new due-soon deadlines."
+    : permission === "denied"
+      ? "Browser notifications are blocked. You can change this in browser site settings."
+      : "Optional: enable a browser alert for new deadlines due within 24 hours.";
+}
+
 deadlineReminderNavigate.addEventListener("click", () => {
-  requestReminderNotifications();
   scrollToSection("queue");
 });
 
+deadlineReminderSnooze.addEventListener("click", () => {
+  const item = currentUrgentItems.find((candidate) => !isReminderSnoozed(candidate));
+  if (!item) return;
+  const snoozes = storedReminderMap(reminderSnoozesStorageKey);
+  snoozes[deadlineReminderKey(item)] = Date.now() + 60 * 60 * 1000;
+  localStorage.setItem(reminderSnoozesStorageKey, JSON.stringify(snoozes));
+  updateDeadlineReminder(currentUrgentItems);
+});
+
 deadlineReminderDismiss.addEventListener("click", () => {
-  deadlineReminderDismissed = true;
-  deadlineReminder.hidden = true;
+  const item = currentUrgentItems.find((candidate) => !isReminderSnoozed(candidate));
+  if (!item) return;
+  const snoozes = storedReminderMap(reminderSnoozesStorageKey);
+  snoozes[deadlineReminderKey(item)] = Date.now() + 24 * 60 * 60 * 1000;
+  localStorage.setItem(reminderSnoozesStorageKey, JSON.stringify(snoozes));
+  updateDeadlineReminder(currentUrgentItems);
 });
 
 function queueItem(item, groupName) {

@@ -88,6 +88,7 @@ backend/triage.db.*.bak
 sqlitedb
 backend/triage.db
 backend/archive/
+backend/seed_demo_video_data.py
 backend/credentials.json
 backend/token.json
 

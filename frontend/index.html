@@ -95,6 +95,7 @@
           <span class="deadline-reminder-title">Deadline reminder</span>
           <span id="deadline-reminder-text"></span>
         </button>
+        <button id="deadline-reminder-snooze" class="deadline-reminder-snooze" type="button">Snooze 1h</button>
         <button id="deadline-reminder-dismiss" class="deadline-reminder-dismiss" type="button" aria-label="Dismiss deadline reminder">×</button>
       </aside>
 
@@ -218,9 +219,9 @@
       <p class="eyebrow">TRIAGE PREFERENCES</p><h2 id="settings-title">Settings</h2>
       <section data-settings-panel="profile"><h3>Your local form details</h3><p class="muted">Optional details used only to fill matching routine-form drafts. They stay in this browser: Triage never sends them to the API or classifier, and never submits a form.</p><form id="profile-form" class="profile-form"><label>Name<input id="profile-full-name" name="full_name" autocomplete="name" /></label><label>Roll number<input id="profile-roll-number" name="roll_number" /></label><label>College email<input id="profile-college-email" name="college_email" type="email" autocomplete="email" /></label><label>Phone number<input id="profile-phone-number" name="phone_number" type="tel" autocomplete="tel" /></label><label>Programme<input id="profile-programme" name="programme" /></label><label>Section<input id="profile-section" name="section" /></label><p id="profile-status" class="muted" aria-live="polite"></p><button type="submit">Save local details</button></form><button id="settings-sign-out" class="secondary" type="button">Sign out of demo</button></section>
       <section data-settings-panel="theme" hidden><h3>Theme</h3><p class="muted">Choose the surface that is easiest on your eyes.</p><div class="theme-options"><button type="button" data-theme-choice="system">System</button><button type="button" data-theme-choice="light">Light</button><button type="button" data-theme-choice="dark">Dark</button></div></section>
-      <section data-settings-panel="app" hidden><h3>App settings</h3><label class="settings-toggle"><input id="deadline-reminders-setting" type="checkbox" checked /><span>Show deadline reminders</span></label><label class="settings-toggle"><input id="reduced-motion-setting" type="checkbox" /><span>Reduce motion</span></label><p class="muted">These preferences affect this browser only.</p></section>
+      <section data-settings-panel="app" hidden><h3>App settings</h3><label class="settings-toggle"><input id="deadline-reminders-setting" type="checkbox" checked /><span>Show deadline reminders</span></label><div class="notification-setting"><button id="enable-deadline-notifications" class="secondary" type="button">Enable browser notifications</button><p id="deadline-notification-status" class="muted" aria-live="polite"></p></div><label class="settings-toggle"><input id="reduced-motion-setting" type="checkbox" /><span>Reduce motion</span></label><p class="muted">Triage checks open obligations every five minutes while this tab is open. Browser notifications need your permission and may not appear after the browser is closed.</p></section>
     </aside>
     <script src="/api/config"></script>
-    <script src="app.js?v=20260722-form-drafts"></script>
+    <script src="app.js?v=20260722-deadline-reminders"></script>
   </body>
 </html>

@@ -34,7 +34,7 @@ The key safety mechanism is Human Review. Triage can draft a copy-only response 
 
 ### Student desk
 
-- Action Queue with urgency grouping, compact cards, detail dialogs, deadline reminders, and local mark-done requests.
+- Action Queue with urgency grouping, compact cards, detail dialogs, deadline reminders with snooze/optional browser alerts, and local mark-done requests.
 - Approval Drawer with editable poll/form response drafts, browser-local form details, and explicit no-send language.
 - Ranked Study Plan with expandable topic outlines.
 - Assignment Scaffolding with requirements, concepts, approach, and test cases—never a complete submission.
