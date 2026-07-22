@@ -17,7 +17,7 @@ Triage is a local-first AI student desk for scattered academic communication. It
 - Assignment Scaffolding that returns requirements, concepts, an approach, and test cases—not a submittable solution.
 - Local, read-only Gmail and Google Classroom sync after Google OAuth setup.
 - Clearly labelled representative WhatsApp demo data; there is no live WhatsApp integration.
-- Local archiving and authenticated download of uploaded `.txt` files.
+- Local archiving and authenticated download of uploaded `.txt` files plus newly synced Gmail attachments and accessible Classroom Drive files (up to 20 MB each).
 - Shared demo-password gate, in-memory sessions, in-app deadline reminders with per-item snooze and optional browser notifications, keyboard/pulse-rail navigation, theme controls, and reduced-motion support.
 
 ## Product boundaries
@@ -101,7 +101,7 @@ cd backend
 
 The browser consent flow writes the local refresh token to `backend/token.json`. Both files are ignored by Git. Return to Triage and use **Sync Gmail** or **Sync Classroom** from Connected Sources.
 
-If the token was created before Classroom scopes were added, run the setup command again. Google Workspace domains may grant a narrower scope set; Triage keeps the granted token and uses whichever permitted integrations are available.
+If the token was created before Classroom or Drive scopes were added, run the setup command again. Triage uses read-only Drive access only to retain attached Classroom files locally; inaccessible files or narrower Workspace grants leave normal Classroom text sync intact.
 
 ## API overview
 
@@ -124,7 +124,8 @@ All endpoints except `GET /health` and `POST /auth/login` require the demo beare
 | `GET /study/plan` | Retrieves the latest stored study plan. |
 | `POST /assignment/help` | Creates and stores a planning-only assignment scaffold. |
 | `GET /assignment/history` | Retrieves saved assignment scaffolds. |
-| `GET /archive/{filename}` | Downloads one authenticated locally archived upload. |
+| `GET /archive` | Lists locally retained files that are still available. |
+| `GET /archive/{filename}` | Downloads one authenticated locally archived file. |
 
 ## Deployment notes
 
@@ -138,7 +139,7 @@ CORS_ORIGINS=https://triage-27.vercel.app
 
 Set Vercel's public `TRIAGE_API_BASE_URL` to the Railway API URL. Never expose `OPENAI_API_KEY` or `DEMO_PASSWORD` in Vercel.
 
-The current hosted backend uses SQLite, a local archive directory, and in-memory sessions. Data and sessions may not survive a redeploy or restart. Google OAuth remains local-only: do not upload `credentials.json` or `token.json` to Railway. A production version needs per-user web OAuth, durable storage, and object storage for archives.
+The current hosted backend uses SQLite, a local archive directory, and in-memory sessions. Data and sessions may not survive a redeploy or restart. Google OAuth remains local-only: do not upload `credentials.json` or `token.json` to Railway. Archive copies are local only, bounded to 20 MB per file, and can be downloaded from the Stream archive or an item detail; a production version needs per-user web OAuth, durable storage, and object storage for archives.
 
 Deadline reminders are browser-local: Triage refreshes the open queue every five minutes while the tab is open, shows due-soon items within 24 hours, and can send browser notifications only after the student explicitly enables them. It does not send email, text messages, or background push notifications after the browser is closed.
 

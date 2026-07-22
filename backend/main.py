@@ -3,7 +3,6 @@
 import os
 import re
 import secrets
-from uuid import uuid4
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -12,6 +11,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from dotenv import load_dotenv
 
+from attachment_archive import (
+    archive_attachment,
+    archive_source_attachments,
+    original_filename_from_archive,
+)
 from assignment_helper import scaffold_assignment
 from classifier import (
     build_study_plan,
@@ -32,6 +36,7 @@ from database import (
     get_item_by_source_id,
     has_items_from_source,
     get_assignment_history,
+    get_archived_attachments,
     get_open_obligations,
     get_pending_actions,
     get_study_plan,
@@ -177,6 +182,7 @@ def sync_gmail() -> dict[str, int]:
             create_item(
                 message["text"],
                 classify(message["text"]),
+                attachments=archive_source_attachments(ARCHIVE_DIRECTORY, message.get("attachments")),
                 source="gmail",
                 source_id=message["id"],
             )
@@ -200,6 +206,7 @@ def sync_classroom() -> dict[str, int]:
             create_item(
                 item["text"],
                 classify(item["text"]),
+                attachments=archive_source_attachments(ARCHIVE_DIRECTORY, item.get("attachments")),
                 source="classroom",
                 source_id=item["id"],
             )
@@ -341,6 +348,16 @@ def study_plan() -> dict[str, list[dict]]:
     return {"topics": get_study_plan()}
 
 
+@app.get("/archive")
+def list_archive() -> dict[str, list[dict]]:
+    """List locally retained files that are still available to download."""
+    attachments = [
+        attachment for attachment in get_archived_attachments()
+        if (ARCHIVE_DIRECTORY / attachment["archived_path"]).is_file()
+    ]
+    return {"attachments": attachments}
+
+
 @app.get("/archive/{filename}")
 def download_archive(filename: str) -> FileResponse:
     """Serve one locally archived attachment without permitting path traversal."""
@@ -349,7 +366,11 @@ def download_archive(filename: str) -> FileResponse:
     archived_file = ARCHIVE_DIRECTORY / filename
     if not archived_file.is_file():
         raise HTTPException(status_code=404, detail="Archived file not found.")
-    return FileResponse(archived_file, filename=filename, media_type="text/plain")
+    return FileResponse(
+        archived_file,
+        filename=original_filename_from_archive(filename),
+        media_type="application/octet-stream",
+    )
 
 
 @app.post("/assignment/help")
@@ -435,13 +456,7 @@ async def _read_and_archive_text_upload(uploaded_file: object, field_name: str) 
         text = file_bytes.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise ValueError(f"The '{field_name}' file must be UTF-8 encoded.") from exc
-    return text, _archive_upload(uploaded_file.filename, file_bytes)
-
-
-def _archive_upload(original_filename: str, file_bytes: bytes) -> str:
-    """Persist original upload bytes under a collision-resistant local filename."""
-    ARCHIVE_DIRECTORY.mkdir(exist_ok=True)
-    safe_filename = Path(original_filename).name
-    archived_filename = f"{uuid4()}_{safe_filename}"
-    (ARCHIVE_DIRECTORY / archived_filename).write_bytes(file_bytes)
-    return archived_filename
+    archived = archive_attachment(ARCHIVE_DIRECTORY, uploaded_file.filename, file_bytes, "text/plain")
+    if not archived:
+        raise ValueError(f"The '{field_name}' file is empty or exceeds the 20 MB archive limit.")
+    return text, archived["archived_path"]

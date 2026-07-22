@@ -7,11 +7,12 @@ from typing import Any
 
 from googleapiclient.discovery import build
 
+from attachment_archive import MAX_ARCHIVE_BYTES
 from google_client import get_google_credentials
 
 
-def fetch_recent_gmail_messages(max_results: int = 15) -> list[dict[str, str]]:
-    """Return recent inbox message IDs with a usable plain-text body."""
+def fetch_recent_gmail_messages(max_results: int = 15) -> list[dict[str, Any]]:
+    """Return recent inbox messages plus downloadable, non-inline attachments."""
     service = build("gmail", "v1", credentials=get_google_credentials(), cache_discovery=False)
     response = service.users().messages().list(
         userId="me", labelIds=["INBOX"], maxResults=max_results
@@ -23,8 +24,12 @@ def fetch_recent_gmail_messages(max_results: int = 15) -> list[dict[str, str]]:
             userId="me", id=message_ref["id"], format="full"
         ).execute()
         text = _extract_message_text(message).strip() or message.get("snippet", "").strip()
-        if text:
-            messages.append({"id": message["id"], "text": text})
+        attachments = _extract_attachments(service, message)
+        if text or attachments:
+            attachment_names = ", ".join(attachment["filename"] for attachment in attachments)
+            if attachment_names:
+                text = f"{text}\nAttachments: {attachment_names}".strip()
+            messages.append({"id": message["id"], "text": text or "Attached files", "attachments": attachments})
     return messages
 
 
@@ -53,9 +58,44 @@ def _collect_mime_parts(
         _collect_mime_parts(child_part, plain_parts, html_parts)
 
 
+def _extract_attachments(service: Any, message: dict[str, Any]) -> list[dict[str, Any]]:
+    """Download named MIME attachments, excluding inline body parts."""
+    attachments: list[dict[str, Any]] = []
+    for part in _walk_mime_parts(message.get("payload", {})):
+        filename = str(part.get("filename") or "").strip()
+        attachment_id = part.get("body", {}).get("attachmentId")
+        attachment_size = part.get("body", {}).get("size", 0)
+        if not filename or not attachment_id or attachment_size > MAX_ARCHIVE_BYTES:
+            continue
+        response = service.users().messages().attachments().get(
+            userId="me", messageId=message["id"], id=attachment_id
+        ).execute()
+        data = response.get("data")
+        if not data:
+            continue
+        attachments.append(
+            {
+                "filename": filename,
+                "mime_type": part.get("mimeType") or "application/octet-stream",
+                "data": _decode_bytes(data),
+            }
+        )
+    return attachments
+
+
+def _walk_mime_parts(part: dict[str, Any]):
+    yield part
+    for child_part in part.get("parts", []):
+        yield from _walk_mime_parts(child_part)
+
+
 def _decode_body(body_data: str) -> str:
+    return _decode_bytes(body_data).decode("utf-8", errors="replace")
+
+
+def _decode_bytes(body_data: str) -> bytes:
     padding = "=" * (-len(body_data) % 4)
-    return base64.urlsafe_b64decode(body_data + padding).decode("utf-8", errors="replace")
+    return base64.urlsafe_b64decode(body_data + padding)
 
 
 def _strip_html(value: str) -> str:

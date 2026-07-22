@@ -13,6 +13,8 @@ const connectedSourcesList = document.querySelector("#connected-sources-list");
 const connectedSourcesToggle = document.querySelector("#connected-sources-toggle");
 const queue = document.querySelector("#queue");
 const refreshQueueButton = document.querySelector("#refresh-queue");
+const archiveList = document.querySelector("#archive-list");
+const refreshArchiveButton = document.querySelector("#refresh-archive");
 const studyForm = document.querySelector("#study-form");
 const studyPlan = document.querySelector("#study-plan");
 const studyError = document.querySelector("#study-error");
@@ -159,6 +161,7 @@ function loadAppData() {
   loadStudyPlan();
   loadPendingActions();
   loadAssignmentHistory();
+  loadArchive();
   loadConnectedSourcesPanel();
   loadProfile();
 }
@@ -597,6 +600,7 @@ form.addEventListener("submit", async (event) => {
     button.textContent = "Classify with Triage";
     playClassificationTravel(data.category).then(() => {
       if (data.category === "Obligation") loadQueue();
+      loadArchive();
     });
   } catch (requestError) {
     error.textContent = requestError.message;
@@ -718,6 +722,7 @@ async function connectSource(sourceKey) {
     connectedSources[sourceKey] = { connected: true, lastSynced: new Date().toISOString() };
     saveConnectedSources();
     await loadQueue();
+    await loadArchive();
   } catch (requestError) {
     connectedSources[sourceKey] = { ...connectedSources[sourceKey], connected: false, error: requestError.message };
     saveConnectedSources();
@@ -841,11 +846,18 @@ function requestReminderNotifications() {
 function updateDeadlineNotificationStatus() {
   if (!("Notification" in window)) {
     enableDeadlineNotifications.disabled = true;
+    enableDeadlineNotifications.textContent = "Browser notifications unavailable";
     deadlineNotificationStatus.textContent = "This browser does not support notifications.";
     return;
   }
   const permission = Notification.permission;
   enableDeadlineNotifications.disabled = permission !== "default";
+  enableDeadlineNotifications.classList.toggle("is-enabled", permission === "granted");
+  enableDeadlineNotifications.textContent = permission === "granted"
+    ? "Browser notifications enabled"
+    : permission === "denied"
+      ? "Browser notifications blocked"
+      : "Enable browser notifications";
   deadlineNotificationStatus.textContent = permission === "granted"
     ? "Browser notifications are enabled for new due-soon deadlines."
     : permission === "denied"
@@ -892,11 +904,48 @@ function queueItem(item, groupName) {
   `;
 }
 
-function archiveDownloadLink(archivedPath, label = "Download original") {
+function archiveDownloadLink(archivedPath, label = "Download original", downloadFilename = archivedPath) {
   if (!archivedPath) return "";
-  const filename = escapeHtml(archivedPath);
+  const filename = escapeHtml(downloadFilename || archivedPath);
   return `<a class="download-original" href="${apiUrl(`/archive/${encodeURIComponent(archivedPath)}`)}" data-archive-filename="${filename}">${label}</a>`;
 }
+
+function itemArchiveLinks(item) {
+  const attachmentLinks = (item.attachments || []).map((attachment) =>
+    archiveDownloadLink(attachment.archived_path, `Download ${attachment.filename}`, attachment.filename),
+  ).join("");
+  return `${archiveDownloadLink(item.archived_path)}${attachmentLinks}`;
+}
+
+function formatFileSize(bytes) {
+  if (!Number.isFinite(bytes)) return "Stored locally";
+  if (bytes < 1024) return `${bytes} B`;
+  return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
+}
+
+async function loadArchive() {
+  archiveList.innerHTML = '<p class="muted">Checking local archive…</p>';
+  try {
+    const response = await apiFetch(apiUrl("/archive"));
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "Could not load the local archive.");
+    const attachments = data.attachments || [];
+    if (!attachments.length) {
+      archiveList.innerHTML = '<p class="empty-state">No attachments retained yet. Sync a local source or upload a text file.</p>';
+      return;
+    }
+    archiveList.innerHTML = attachments.slice(0, 6).map((attachment) => `
+      <article class="archive-entry">
+        <div><strong>${escapeHtml(attachment.filename)}</strong><span>${escapeHtml(attachment.source)} · ${escapeHtml(formatFileSize(attachment.size))}</span></div>
+        ${archiveDownloadLink(attachment.archived_path, "Download", attachment.filename)}
+      </article>
+    `).join("");
+  } catch (requestError) {
+    archiveList.innerHTML = `<p class="error">${escapeHtml(requestError.message)}</p>`;
+  }
+}
+
+refreshArchiveButton.addEventListener("click", loadArchive);
 
 document.addEventListener("click", async (event) => {
   const link = event.target.closest(".download-original");
@@ -992,7 +1041,7 @@ function openQueueDetail(item, trigger) {
     <h2 id="detail-title">${escapeHtml(item.text)}</h2>
     <p class="detail-reason">${escapeHtml(item.reason)}</p>
     <div class="detail-facts"><div><span>Deadline</span><strong class="deadline${deadlineClass}">${escapeHtml(deadline)}</strong></div><div><span>Requirement</span><strong>${mandatory}</strong></div></div>
-    <div class="detail-actions">${looksLikeRoutineFormRequest(item.text) ? `<button class="draft-form-button secondary" type="button" data-item-id="${item.id}">Draft form response</button>` : ""}<button class="done-button" type="button" data-item-id="${item.id}">Mark done for review</button>${archiveDownloadLink(item.archived_path)}</div>
+    <div class="detail-actions">${looksLikeRoutineFormRequest(item.text) ? `<button class="draft-form-button secondary" type="button" data-item-id="${item.id}">Draft form response</button>` : ""}<button class="done-button" type="button" data-item-id="${item.id}">Mark done for review</button>${itemArchiveLinks(item)}</div>
   `, trigger);
 }
 

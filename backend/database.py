@@ -32,6 +32,7 @@ def initialize_database() -> None:
                 created_at TEXT NOT NULL,
                 status TEXT NOT NULL DEFAULT 'open',
                 archived_path TEXT,
+                attachments TEXT NOT NULL DEFAULT '[]',
                 source_id TEXT,
                 is_poll_or_form INTEGER NOT NULL DEFAULT 0
             )
@@ -77,6 +78,7 @@ def initialize_database() -> None:
             """
         )
         _add_column_if_missing(connection, "items", "archived_path", "TEXT")
+        _add_column_if_missing(connection, "items", "attachments", "TEXT NOT NULL DEFAULT '[]'")
         _add_column_if_missing(connection, "items", "source_id", "TEXT")
         _add_column_if_missing(connection, "items", "is_poll_or_form", "INTEGER NOT NULL DEFAULT 0")
         _add_column_if_missing(connection, "study_plans", "question_bank_archived_path", "TEXT")
@@ -100,6 +102,7 @@ def create_item(
     text: str,
     classification: dict[str, Any],
     archived_path: str | None = None,
+    attachments: list[dict[str, Any]] | None = None,
     source: str = "manual",
     source_id: str | None = None,
 ) -> dict[str, Any] | None:
@@ -112,9 +115,9 @@ def create_item(
             """
             INSERT INTO items (
                 text, category, reason, deadline, mandatory, source,
-                created_at, status, archived_path, source_id, is_poll_or_form
+                created_at, status, archived_path, attachments, source_id, is_poll_or_form
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)
             """,
             (
                 text.strip(),
@@ -125,6 +128,7 @@ def create_item(
                 source,
                 created_at,
                 archived_path,
+                json.dumps(attachments or []),
                 source_id,
                 bool(classification.get("is_poll_or_form", False)),
             ),
@@ -169,6 +173,81 @@ def get_open_obligations() -> list[dict[str, Any]]:
             """
         ).fetchall()
     return [_row_to_item(row) for row in rows]
+
+
+def get_archived_attachments() -> list[dict[str, Any]]:
+    """Return metadata for locally archived source and upload files, newest first."""
+    entries: list[dict[str, Any]] = []
+    seen_paths: set[str] = set()
+    with _connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT text, source, created_at, archived_path, attachments
+            FROM items
+            WHERE archived_path IS NOT NULL OR attachments != '[]'
+            ORDER BY created_at DESC
+            """
+        ).fetchall()
+        study_rows = connection.execute(
+            """
+            SELECT created_at, question_bank_archived_path, unit_notes_archived_path
+            FROM study_plans
+            WHERE question_bank_archived_path IS NOT NULL OR unit_notes_archived_path IS NOT NULL
+            ORDER BY created_at DESC
+            """
+        ).fetchall()
+
+    for row in rows:
+        for attachment in json.loads(row["attachments"] or "[]"):
+            archived_path = attachment.get("archived_path")
+            if not archived_path or archived_path in seen_paths:
+                continue
+            seen_paths.add(archived_path)
+            entries.append(
+                {
+                    "archived_path": archived_path,
+                    "filename": attachment.get("filename") or archived_path,
+                    "mime_type": attachment.get("mime_type") or "application/octet-stream",
+                    "size": attachment.get("size"),
+                    "source": row["source"],
+                    "item_text": row["text"],
+                    "created_at": row["created_at"],
+                }
+            )
+        if row["archived_path"] and row["archived_path"] not in seen_paths:
+            seen_paths.add(row["archived_path"])
+            entries.append(
+                {
+                    "archived_path": row["archived_path"],
+                    "filename": row["archived_path"],
+                    "mime_type": "text/plain",
+                    "size": None,
+                    "source": row["source"],
+                    "item_text": row["text"],
+                    "created_at": row["created_at"],
+                }
+            )
+
+    for row in study_rows:
+        for label, archived_path in (
+            ("Question bank", row["question_bank_archived_path"]),
+            ("Unit notes", row["unit_notes_archived_path"]),
+        ):
+            if not archived_path or archived_path in seen_paths:
+                continue
+            seen_paths.add(archived_path)
+            entries.append(
+                {
+                    "archived_path": archived_path,
+                    "filename": archived_path,
+                    "mime_type": "text/plain",
+                    "size": None,
+                    "source": "study upload",
+                    "item_text": label,
+                    "created_at": row["created_at"],
+                }
+            )
+    return entries
 
 
 def mark_done(item_id: int) -> bool:
@@ -359,6 +438,7 @@ def _row_to_item(row: sqlite3.Row) -> dict[str, Any]:
     item = dict(row)
     item["mandatory"] = None if item["mandatory"] is None else bool(item["mandatory"])
     item["is_poll_or_form"] = bool(item.get("is_poll_or_form", False))
+    item["attachments"] = json.loads(item.get("attachments") or "[]")
     return item
 
 
