@@ -46,6 +46,7 @@ const loginScreen = document.querySelector("#login-screen");
 const loginForm = document.querySelector("#login-form");
 const loginPassword = document.querySelector("#login-password");
 const loginError = document.querySelector("#login-error");
+const googleLoginButton = document.querySelector("#google-login-button");
 const appShell = document.querySelector("#app-shell");
 const railNodes = document.querySelectorAll(".rail-node");
 const railToggle = document.querySelector(".rail-toggle");
@@ -99,10 +100,39 @@ const sourceDefinitions = {
 };
 let connectedSources = loadConnectedSources();
 let googleAuthorized = false;
+let hostedAuthAvailable = false;
 let syncingSource = null;
 
 function apiUrl(path) {
   return `${apiBaseUrl}${path}`;
+}
+
+async function loadAuthConfig() {
+  try {
+    const response = await fetch(apiUrl("/auth/config"));
+    const data = await response.json();
+    hostedAuthAvailable = response.ok && data.hosted_auth === true;
+  } catch {
+    hostedAuthAvailable = false;
+  }
+  googleLoginButton.hidden = !hostedAuthAvailable;
+  loginPassword.closest("label").hidden = hostedAuthAvailable;
+  loginPassword.hidden = hostedAuthAvailable;
+  loginForm.querySelector("button[type='submit']").hidden = hostedAuthAvailable;
+}
+
+function startGoogleSignIn() {
+  window.location.assign(apiUrl(`/auth/google/start?return_to=${encodeURIComponent(window.location.origin)}`));
+}
+
+function acceptOAuthTokenFromFragment() {
+  const params = new URLSearchParams(window.location.hash.slice(1));
+  const token = params.get("oauth_token");
+  if (!token) return false;
+  authToken = token;
+  localStorage.setItem("triage-demo-token", token);
+  window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+  return true;
 }
 
 function showLoginScreen() {
@@ -113,6 +143,7 @@ function showLoginScreen() {
   appShell.hidden = true;
   loginScreen.hidden = false;
   loginPassword.value = "";
+  loadAuthConfig();
 }
 
 function showLandingScreen() {
@@ -358,7 +389,7 @@ document.addEventListener("keydown", (event) => {
 loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   loginError.textContent = "";
-  const submitButton = loginForm.querySelector("button");
+  const submitButton = loginForm.querySelector("button[type='submit']");
   submitButton.disabled = true;
   submitButton.textContent = "Opening…";
   try {
@@ -380,6 +411,7 @@ loginForm.addEventListener("submit", async (event) => {
     submitButton.textContent = "Open Triage";
   }
 });
+googleLoginButton.addEventListener("click", startGoogleSignIn);
 
 document.querySelectorAll("[data-open-login]").forEach((button) => {
   button.addEventListener("click", showLoginScreen);
@@ -1376,6 +1408,7 @@ function createValidatedDate(year, month, day, hour = 0, minute = 0) {
   ) ? parsed : null;
 }
 
+acceptOAuthTokenFromFragment();
 if (authToken) {
   showApp();
   loadAppData();

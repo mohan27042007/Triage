@@ -46,7 +46,7 @@ The key safety mechanism is Human Review. Triage can draft a copy-only response 
 
 - Frontend: [Vercel](https://triage-27.vercel.app)
 - Backend: [Railway](https://triage-production-b91f.up.railway.app/health)
-- Local mode remains the supported place for Google OAuth source connections.
+- Hosted Google OAuth now supports per-user, read-only Gmail and Classroom connections when Postgres and the required deployment secrets are configured. Local desktop OAuth remains available for local development.
 
 ## Technical architecture
 
@@ -67,13 +67,13 @@ Codex was the primary engineering collaborator for this solo build. It helped tr
 
 - No WhatsApp, email, form, or external submission capability exists.
 - WhatsApp data in the demo is simulated and labelled as such.
-- Google source sync is read-only and presently designed for local OAuth, not hosted per-user accounts.
+- Hosted Google source sync is read-only and user-scoped. Attachment bytes remain on Railway's local filesystem until managed object storage is added.
 - SQLite, local archives, and in-memory sessions make the current deployment a demo environment rather than durable production infrastructure.
 - Triage does not generate final academic submissions.
 
 ## Next steps
 
-1. Add per-user hosted Google OAuth and durable account/session storage.
+1. Move hosted attachment archives from Railway's local filesystem to durable object storage with retention controls.
 2. Move from SQLite/local archives to managed storage and object storage.
 3. Add real-time source webhooks where available, robust connection health, retry states, broader accessibility testing, and fuller archive-history retention controls.
 4. Add durable object storage, virus scanning, retention controls, and broader file preview support for the local attachment archive.

@@ -10,10 +10,10 @@ from google_client import get_google_credentials
 
 
 def fetch_recent_classroom_items(
-    max_courses: int = 10, max_announcements_per_course: int = 5
+    max_courses: int = 10, max_announcements_per_course: int = 5, owner_id: str | None = None
 ) -> list[dict[str, Any]]:
     """Return recent active-course items with any attached Drive files."""
-    credentials = get_google_credentials()
+    credentials = get_google_credentials(owner_id)
     service = build(
         "classroom", "v1", credentials=credentials, cache_discovery=False
     )

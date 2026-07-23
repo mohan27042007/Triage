@@ -1,5 +1,7 @@
 """Shared read-only Google OAuth credential helpers for Triage sources."""
 
+import json
+import os
 from pathlib import Path
 
 from google.auth.transport.requests import Request
@@ -15,8 +17,25 @@ GOOGLE_SCOPES = [
 TOKEN_PATH = Path(__file__).with_name("token.json")
 
 
-def get_google_credentials() -> Credentials:
-    """Load and refresh the locally authorized Google credentials."""
+def get_google_credentials(owner_id: str | None = None) -> Credentials:
+    """Load user-scoped hosted credentials or retain the local desktop fallback."""
+    if os.getenv("HOSTED_AUTH_ENABLED", "").lower() == "true":
+        if not owner_id:
+            raise RuntimeError("A hosted Google sync requires an authenticated user.")
+        from hosted_auth import credentials_json, save_credentials_json
+
+        stored = credentials_json(owner_id)
+        if not stored:
+            raise RuntimeError("Connect your Google account before syncing this source.")
+        credentials = Credentials.from_authorized_user_info(json.loads(stored))
+        if credentials.valid:
+            return credentials
+        if not credentials.expired or not credentials.refresh_token:
+            raise RuntimeError("Your Google connection expired. Connect it again to continue.")
+        credentials.refresh(Request())
+        save_credentials_json(owner_id, credentials.to_json())
+        return credentials
+
     if not TOKEN_PATH.is_file():
         raise RuntimeError(
             "Google authorization has not been set up. Run python setup_google_auth.py "

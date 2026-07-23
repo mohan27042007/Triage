@@ -92,7 +92,7 @@ cd backend
 .\.venv\Scripts\python.exe seed_demo_video_data.py
 ```
 
-## Google source setup (local only)
+## Google source setup (local desktop mode)
 
 Create a Google Cloud **Desktop app** OAuth client and save it as `backend/credentials.json`. Then run:
 
@@ -107,11 +107,13 @@ If the token was created before Classroom or Drive scopes were added, run the se
 
 ## API overview
 
-All endpoints except `GET /health` and `POST /auth/login` require the demo bearer token issued by login.
+All application endpoints require a bearer session token. Local demo mode issues one after the shared-password login; hosted mode issues one after Google OAuth.
 
 | Endpoint | Purpose |
 | --- | --- |
 | `POST /auth/login` | Exchanges the shared demo password for an in-memory token. |
+| `GET /auth/google/start` | Starts hosted Google OAuth when deployment configuration enables it. |
+| `GET /auth/google/callback` | Completes hosted OAuth and returns a fragment-only API session token. |
 | `POST /ingest` | Classifies pasted JSON text or an uploaded UTF-8 `.txt` file. |
 | `GET /queue` | Returns open obligations grouped by urgency. |
 | `GET /stream` | Returns the newest classified items across all available sources. |
@@ -143,7 +145,30 @@ CORS_ORIGINS=https://triage-27.vercel.app
 
 Set Vercel's public `TRIAGE_API_BASE_URL` to the Railway API URL. Never expose `OPENAI_API_KEY` or `DEMO_PASSWORD` in Vercel.
 
-The current hosted backend uses SQLite, a local archive directory, and in-memory sessions. Data and sessions may not survive a redeploy or restart. Google OAuth remains local-only: do not upload `credentials.json` or `token.json` to Railway. Archive copies are local only, bounded to 20 MB per file, and can be downloaded from the Stream archive or an item detail; a production version needs per-user web OAuth, durable storage, and object storage for archives.
+## Hosted Google OAuth
+
+Hosted mode uses Google Web OAuth for a student's own Gmail and Classroom connection. It stores only encrypted Google credential payloads and hashed API session tokens in Railway Postgres. Each stored item, pending action, study plan, assignment scaffold, source deduplication key, and archive listing is scoped to the authenticated student.
+
+Create a Google **Web application** OAuth client, enable Gmail, Classroom, and Drive APIs, and register this exact callback URL in Google Cloud:
+
+```text
+https://YOUR-RAILWAY-DOMAIN/auth/google/callback
+```
+
+Set these Railway variables without committing their values:
+
+```text
+HOSTED_AUTH_ENABLED=true
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+FRONTEND_ORIGIN=https://YOUR-VERCEL-DOMAIN
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GOOGLE_REDIRECT_URI=https://YOUR-RAILWAY-DOMAIN/auth/google/callback
+OAUTH_TOKEN_ENCRYPTION_KEY=...  # Fernet key, generated once and retained
+CORS_ORIGINS=https://YOUR-VERCEL-DOMAIN
+```
+
+The browser receives the API session token only in the OAuth redirect fragment, then immediately removes it from the URL. Triage uses read-only Google scopes and does not send messages, complete external forms, or submit anything. Local desktop OAuth remains supported when hosted mode is disabled. Hosted attachment bytes still use Railway's local filesystem and are not durable object storage; a future storage task should move them to managed object storage.
 
 Deadline reminders are browser-local: Triage refreshes the open queue every five minutes while the tab is open, shows due-soon items within 24 hours, and can send browser notifications only after the student explicitly enables them. It does not send email, text messages, or background push notifications after the browser is closed.
 

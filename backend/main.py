@@ -8,8 +8,10 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from dotenv import load_dotenv
+
+load_dotenv()
 
 from attachment_archive import (
     archive_attachment,
@@ -26,6 +28,15 @@ from classifier import (
 from classroom_sync import fetch_recent_classroom_items
 from gmail_sync import fetch_recent_gmail_messages
 from google_client import TOKEN_PATH
+from hosted_auth import (
+    authorization_url,
+    complete_authorization,
+    configuration_error as hosted_auth_configuration_error,
+    has_google_connection,
+    initialize as initialize_hosted_auth,
+    is_enabled as hosted_auth_enabled,
+    session_user,
+)
 from whatsapp_demo_data import WHATSAPP_DEMO_MESSAGES, WHATSAPP_DEMO_SOURCE
 from database import (
     create_assignment_help,
@@ -45,9 +56,8 @@ from database import (
     initialize_database,
     reject_pending_action,
     replace_study_plan,
+    DEFAULT_OWNER_ID,
 )
-
-load_dotenv()
 
 app = FastAPI(title="Triage API", version="0.1.0")
 DEMO_PASSWORD = os.getenv("DEMO_PASSWORD", "")
@@ -61,18 +71,29 @@ CORS_ORIGINS = [
 ]
 
 initialize_database()
+initialize_hosted_auth()
 
 
 @app.middleware("http")
 async def require_demo_auth(request: Request, call_next):
     """Require an in-memory demo token for all non-public API routes."""
-    if request.method == "OPTIONS" or request.url.path in {"/health", "/auth/login"}:
+    public_paths = {"/health", "/auth/login", "/auth/config", "/auth/google/start", "/auth/google/callback"}
+    if request.method == "OPTIONS" or request.url.path in public_paths:
         return await call_next(request)
 
     authorization = request.headers.get("authorization", "")
     scheme, _, token = authorization.partition(" ")
-    if scheme.lower() != "bearer" or token not in VALID_SESSION_TOKENS:
+    if scheme.lower() != "bearer":
         return JSONResponse(status_code=401, content={"detail": "Authentication required."})
+    if hosted_auth_enabled():
+        owner_id = session_user(token)
+        if not owner_id:
+            return JSONResponse(status_code=401, content={"detail": "Authentication required."})
+        request.state.owner_id = owner_id
+        return await call_next(request)
+    if token not in VALID_SESSION_TOKENS:
+        return JSONResponse(status_code=401, content={"detail": "Authentication required."})
+    request.state.owner_id = DEFAULT_OWNER_ID
     return await call_next(request)
 
 
@@ -93,6 +114,8 @@ def health() -> dict[str, str]:
 @app.post("/auth/login")
 async def login(request: Request) -> dict[str, str]:
     """Issue an in-memory token after validating the shared demo password."""
+    if hosted_auth_enabled():
+        raise HTTPException(status_code=403, detail="Use Google sign-in for this hosted deployment.")
     if not request.headers.get("content-type", "").startswith("application/json"):
         raise HTTPException(status_code=400, detail='Use application/json with {"password": "..."}.')
     if not DEMO_PASSWORD:
@@ -110,6 +133,33 @@ async def login(request: Request) -> dict[str, str]:
     token = secrets.token_hex(32)
     VALID_SESSION_TOKENS.add(token)
     return {"token": token}
+
+
+@app.get("/auth/config")
+def auth_config() -> dict[str, bool]:
+    """Let the frontend show hosted Google sign-in only when it is configured."""
+    return {"hosted_auth": hosted_auth_enabled() and hosted_auth_configuration_error() is None}
+
+
+@app.get("/auth/google/start")
+def start_google_auth(return_to: str | None = None) -> RedirectResponse:
+    """Redirect a hosted user into the read-only Google consent flow."""
+    try:
+        return RedirectResponse(authorization_url(return_to), status_code=302)
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/auth/google/callback")
+def google_auth_callback(code: str = "", state: str = "") -> RedirectResponse:
+    """Exchange the verified callback and return a fragment-only API session token."""
+    if not code or not state:
+        raise HTTPException(status_code=400, detail="Google sign-in did not return code and state.")
+    try:
+        return_to, token = complete_authorization(code, state)
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return RedirectResponse(f"{return_to}#oauth_token={token}", status_code=303)
 
 
 @app.post("/ingest")
@@ -148,6 +198,7 @@ async def ingest(request: Request) -> dict:
             text,
             classification,
             archived_path if content_type.startswith("multipart/form-data") else None,
+            owner_id=request.state.owner_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -156,43 +207,43 @@ async def ingest(request: Request) -> dict:
 
 
 @app.get("/queue")
-def queue() -> dict[str, list[dict]]:
+def queue(request: Request) -> dict[str, list[dict]]:
     """Return open obligations grouped by the attention they need."""
     grouped: dict[str, list[dict]] = {"Immediate": [], "This Week": [], "Later": []}
-    for item in get_open_obligations():
+    for item in get_open_obligations(request.state.owner_id):
         grouped[_queue_group(item)].append(item)
     return grouped
 
 
 @app.get("/stream")
-def stream() -> dict[str, list[dict]]:
+def stream(request: Request) -> dict[str, list[dict]]:
     """Return the latest classified items across manual and connected sources."""
-    return {"items": get_recent_items()}
+    return {"items": get_recent_items(owner_id=request.state.owner_id)}
 
 
 @app.get("/history")
-def history(
+def history(request: Request,
     query: str = "", category: str = "", source: str = "", status: str = ""
 ) -> dict[str, list[dict]]:
     """Search the local classification history without changing any item."""
-    return {"items": get_history_items(query, category, source, status)}
+    return {"items": get_history_items(query, category, source, status, owner_id=request.state.owner_id)}
 
 
 @app.get("/sources/google/status")
-def google_source_status() -> dict[str, bool]:
+def google_source_status(request: Request) -> dict[str, bool]:
     """Report whether the local Google OAuth setup has completed."""
-    return {"authorized": TOKEN_PATH.is_file()}
+    return {"authorized": has_google_connection(request.state.owner_id) if hosted_auth_enabled() else TOKEN_PATH.is_file()}
 
 
 @app.post("/sources/gmail/sync")
-def sync_gmail() -> dict[str, int]:
+def sync_gmail(request: Request) -> dict[str, int]:
     """Classify new inbox messages while preserving Gmail IDs for deduplication."""
     try:
-        messages = fetch_recent_gmail_messages()
+        messages = fetch_recent_gmail_messages(owner_id=request.state.owner_id)
         processed = 0
         skipped = 0
         for message in messages:
-            if get_item_by_source_id(message["id"]):
+            if get_item_by_source_id(message["id"], request.state.owner_id):
                 skipped += 1
                 continue
             create_item(
@@ -201,6 +252,7 @@ def sync_gmail() -> dict[str, int]:
                 attachments=archive_source_attachments(ARCHIVE_DIRECTORY, message.get("attachments")),
                 source="gmail",
                 source_id=message["id"],
+                owner_id=request.state.owner_id,
             )
             processed += 1
         return {"processed": processed, "skipped": skipped}
@@ -209,14 +261,14 @@ def sync_gmail() -> dict[str, int]:
 
 
 @app.post("/sources/classroom/sync")
-def sync_classroom() -> dict[str, int]:
+def sync_classroom(request: Request) -> dict[str, int]:
     """Classify new Classroom items while preserving IDs for deduplication."""
     try:
-        items = fetch_recent_classroom_items()
+        items = fetch_recent_classroom_items(owner_id=request.state.owner_id)
         processed = 0
         skipped = 0
         for item in items:
-            if get_item_by_source_id(item["id"]):
+            if get_item_by_source_id(item["id"], request.state.owner_id):
                 skipped += 1
                 continue
             create_item(
@@ -225,6 +277,7 @@ def sync_classroom() -> dict[str, int]:
                 attachments=archive_source_attachments(ARCHIVE_DIRECTORY, item.get("attachments")),
                 source="classroom",
                 source_id=item["id"],
+                owner_id=request.state.owner_id,
             )
             processed += 1
         return {"processed": processed, "skipped": skipped}
@@ -233,9 +286,9 @@ def sync_classroom() -> dict[str, int]:
 
 
 @app.post("/sources/whatsapp/demo-load")
-def load_whatsapp_demo_data() -> dict[str, int | bool | str]:
+def load_whatsapp_demo_data(request: Request) -> dict[str, int | bool | str]:
     """Classify and persist the representative, non-live WhatsApp demo messages."""
-    if has_items_from_source(WHATSAPP_DEMO_SOURCE):
+    if has_items_from_source(WHATSAPP_DEMO_SOURCE, request.state.owner_id):
         return {
             "processed": 0,
             "already_loaded": True,
@@ -249,6 +302,7 @@ def load_whatsapp_demo_data() -> dict[str, int | bool | str]:
                 classify(message),
                 source=WHATSAPP_DEMO_SOURCE,
                 source_id=f"whatsapp-demo-{index}",
+                owner_id=request.state.owner_id,
             )
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -261,9 +315,9 @@ def load_whatsapp_demo_data() -> dict[str, int | bool | str]:
 
 
 @app.post("/queue/{item_id}/done")
-def request_queue_item_completion(item_id: int) -> dict:
+def request_queue_item_completion(item_id: int, request: Request) -> dict:
     """Request human approval before marking one queue item done."""
-    item = get_item(item_id)
+    item = get_item(item_id, request.state.owner_id)
     if not item or item["category"] != "Obligation" or item["status"] != "open":
         raise HTTPException(status_code=404, detail="Open queue item not found.")
     payload = {
@@ -278,13 +332,14 @@ def request_queue_item_completion(item_id: int) -> dict:
         item_id=item_id,
         action_type="mark_done",
         payload=payload,
+        owner_id=request.state.owner_id,
     )
 
 
 @app.post("/queue/{item_id}/form-draft")
-def request_form_draft(item_id: int) -> dict:
+def request_form_draft(item_id: int, request: Request) -> dict:
     """Stage a copy-only routine-form draft without marking an obligation complete."""
-    item = get_item(item_id)
+    item = get_item(item_id, request.state.owner_id)
     if not item or item["category"] != "Obligation" or item["status"] != "open":
         raise HTTPException(status_code=404, detail="Open queue item not found.")
 
@@ -302,20 +357,21 @@ def request_form_draft(item_id: int) -> dict:
             "item_text": item["text"],
             "form_fields": draft["fields"],
         },
+        owner_id=request.state.owner_id,
     )
 
 
 @app.get("/pending")
-def pending_actions() -> dict[str, list[dict]]:
+def pending_actions(request: Request) -> dict[str, list[dict]]:
     """List actions that require a student's decision."""
-    return {"actions": get_pending_actions()}
+    return {"actions": get_pending_actions(request.state.owner_id)}
 
 
 @app.post("/pending/{action_id}/approve")
-def approve_action(action_id: int) -> dict:
+def approve_action(action_id: int, request: Request) -> dict:
     """Approve a pending action and apply its underlying local change."""
     try:
-        action = approve_pending_action(action_id)
+        action = approve_pending_action(action_id, request.state.owner_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not action:
@@ -324,9 +380,9 @@ def approve_action(action_id: int) -> dict:
 
 
 @app.post("/pending/{action_id}/reject")
-def reject_action(action_id: int) -> dict:
+def reject_action(action_id: int, request: Request) -> dict:
     """Reject a pending action without applying its underlying change."""
-    action = reject_pending_action(action_id)
+    action = reject_pending_action(action_id, request.state.owner_id)
     if not action:
         raise HTTPException(status_code=404, detail="Pending action not found.")
     return action
@@ -349,7 +405,7 @@ async def upload_study_materials(request: Request) -> dict[str, list[dict]]:
         topics = build_study_plan(question_bank, unit_notes)
         return {
             "topics": replace_study_plan(
-                topics, question_bank_archived_path, unit_notes_archived_path
+                topics, question_bank_archived_path, unit_notes_archived_path, request.state.owner_id
             )
         }
     except ValueError as exc:
@@ -359,26 +415,28 @@ async def upload_study_materials(request: Request) -> dict[str, list[dict]]:
 
 
 @app.get("/study/plan")
-def study_plan() -> dict[str, list[dict]]:
+def study_plan(request: Request) -> dict[str, list[dict]]:
     """Return the persisted, highest-priority-first study topics."""
-    return {"topics": get_study_plan()}
+    return {"topics": get_study_plan(request.state.owner_id)}
 
 
 @app.get("/archive")
-def list_archive() -> dict[str, list[dict]]:
+def list_archive(request: Request) -> dict[str, list[dict]]:
     """List locally retained files that are still available to download."""
     attachments = [
-        attachment for attachment in get_archived_attachments()
+        attachment for attachment in get_archived_attachments(request.state.owner_id)
         if (ARCHIVE_DIRECTORY / attachment["archived_path"]).is_file()
     ]
     return {"attachments": attachments}
 
 
 @app.get("/archive/{filename}")
-def download_archive(filename: str) -> FileResponse:
+def download_archive(filename: str, request: Request) -> FileResponse:
     """Serve one locally archived attachment without permitting path traversal."""
     if not filename or "/" in filename or "\\" in filename or ".." in filename:
         raise HTTPException(status_code=400, detail="Invalid archive filename.")
+    if filename not in {attachment["archived_path"] for attachment in get_archived_attachments(request.state.owner_id)}:
+        raise HTTPException(status_code=404, detail="Archived file not found.")
     archived_file = ARCHIVE_DIRECTORY / filename
     if not archived_file.is_file():
         raise HTTPException(status_code=404, detail="Archived file not found.")
@@ -403,7 +461,7 @@ async def assignment_help(request: Request) -> dict:
         if len(prompt) > 5000:
             raise ValueError("Assignment prompt is too long.")
         scaffold = scaffold_assignment(prompt)
-        saved_scaffold = create_assignment_help(prompt, scaffold)
+        saved_scaffold = create_assignment_help(prompt, scaffold, request.state.owner_id)
         if not saved_scaffold:
             raise RuntimeError("Could not save the assignment scaffold.")
         return saved_scaffold
@@ -414,9 +472,9 @@ async def assignment_help(request: Request) -> dict:
 
 
 @app.get("/assignment/history")
-def assignment_history() -> dict[str, list[dict]]:
+def assignment_history(request: Request) -> dict[str, list[dict]]:
     """Return saved assignment scaffolds, newest first."""
-    return {"assignments": get_assignment_history()}
+    return {"assignments": get_assignment_history(request.state.owner_id)}
 
 
 def _queue_group(item: dict) -> str:
