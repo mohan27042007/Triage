@@ -206,16 +206,19 @@ function openSettingsView(viewName) {
 }
 
 function applyTheme(theme) {
-  if (theme === "system") {
-    delete document.documentElement.dataset.theme;
-  } else {
-    document.documentElement.dataset.theme = theme;
-  }
+  const resolvedTheme = theme === "system"
+    ? (window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")
+    : theme;
+  document.documentElement.dataset.theme = resolvedTheme;
   localStorage.setItem("triage-theme", theme);
   document.querySelectorAll("[data-theme-choice]").forEach((button) => {
     button.classList.toggle("is-selected", button.dataset.themeChoice === theme);
   });
 }
+
+window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => {
+  if (localStorage.getItem("triage-theme") === "system") applyTheme("system");
+});
 
 async function apiFetch(url, options = {}) {
   const headers = new Headers(options.headers || {});
