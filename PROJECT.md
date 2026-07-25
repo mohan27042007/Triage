@@ -31,7 +31,7 @@ The key safety mechanism is Human Review. Triage can draft a copy-only response 
 - Clearly marked representative WhatsApp demo data, not a live WhatsApp connection.
 - A unified source-labelled stream of recently classified items, refreshed by the open browser every 30 seconds.
 - OpenAI structured-output classification with category, reason, deadline, mandatory status, and poll/form detection.
-- SQLite persistence, source IDs for deduplication, and a local attachment archive: uploaded text files, newly synced Gmail attachments, and accessible Classroom Drive files are retained up to 20 MB each and remain downloadable.
+- SQLite/Postgres persistence, source IDs for deduplication, and a private attachment archive: uploaded text files, newly synced Gmail attachments, and accessible Classroom Drive files are retained up to 20 MB each and remain downloadable. Local mode uses disk; hosted mode can use a private S3-compatible bucket.
 
 ### Student desk
 
@@ -55,7 +55,7 @@ The key safety mechanism is Human Review. Triage can draft a copy-only response 
 | Frontend | Vanilla HTML, CSS, and JavaScript |
 | Backend | Python, FastAPI, Uvicorn |
 | AI workflows | OpenAI Responses API with `gpt-5.6-luna` and JSON schemas |
-| Storage | SQLite for the local/demo workflow |
+| Storage | SQLite locally, Postgres for hosted records, and optional private S3-compatible object storage for hosted attachments |
 | Google integrations | Gmail API + Google Classroom API using read-only OAuth |
 | Hosting | Vercel frontend + Railway backend |
 
@@ -67,18 +67,16 @@ Codex was the primary engineering collaborator for this solo build. It helped tr
 
 - No WhatsApp, email, form, or external submission capability exists.
 - WhatsApp data in the demo is simulated and labelled as such.
-- Hosted Google source sync is read-only and user-scoped. Attachment bytes remain on Railway's local filesystem until managed object storage is added.
+- Hosted Google source sync is read-only and user-scoped. When configured, hosted attachment bytes live in private S3-compatible storage; otherwise the safe local archive fallback remains in use.
 - SQLite, local archives, and in-memory sessions make the current deployment a demo environment rather than durable production infrastructure.
 - Triage does not generate final academic submissions.
 
 ## Next steps
 
-1. Move hosted attachment archives from Railway's local filesystem to durable object storage with retention controls.
-2. Move from SQLite/local archives to managed storage and object storage.
-3. Add real-time source webhooks where available, robust connection health, retry states, broader accessibility testing, and fuller archive-history retention controls.
-4. Add durable object storage, virus scanning, retention controls, and broader file preview support for the local attachment archive.
-5. Investigate a reliable, policy-compliant WhatsApp integration without compromising the stable demo path.
-6. Add more supported routine-form fields only after confirming their privacy and review requirements.
+1. Add storage lifecycle rules, malware scanning, retention controls, and broader file preview support.
+2. Add real-time source webhooks where available, robust connection health, retry states, broader accessibility testing, and fuller archive-history retention controls.
+3. Investigate a reliable, policy-compliant WhatsApp integration without compromising the stable demo path.
+4. Add more supported routine-form fields only after confirming their privacy and review requirements.
 
 ## Demo path
 

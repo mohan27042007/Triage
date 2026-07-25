@@ -8,7 +8,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from dotenv import load_dotenv
 from oauthlib.oauth2.rfc6749.errors import OAuth2Error
 
@@ -16,8 +16,10 @@ load_dotenv()
 
 from attachment_archive import (
     archive_attachment,
+    archived_file_exists,
     archive_source_attachments,
     original_filename_from_archive,
+    read_archived_file,
 )
 from assignment_helper import scaffold_assignment
 from classifier import (
@@ -187,7 +189,9 @@ async def ingest(request: Request) -> dict:
                 raise ValueError(
                     "Only .txt files are supported in this local-first slice."
                 )
-            text, archived_path = await _read_and_archive_text_upload(uploaded_file, "file")
+            text, archived_path = await _read_and_archive_text_upload(
+                uploaded_file, "file", request.state.owner_id
+            )
         else:
             raise ValueError("Use application/json or multipart/form-data.")
 
@@ -250,7 +254,9 @@ def sync_gmail(request: Request) -> dict[str, int]:
             create_item(
                 message["text"],
                 classify(message["text"]),
-                attachments=archive_source_attachments(ARCHIVE_DIRECTORY, message.get("attachments")),
+                attachments=archive_source_attachments(
+                    ARCHIVE_DIRECTORY, message.get("attachments"), request.state.owner_id
+                ),
                 source="gmail",
                 source_id=message["id"],
                 owner_id=request.state.owner_id,
@@ -275,7 +281,9 @@ def sync_classroom(request: Request) -> dict[str, int]:
             create_item(
                 item["text"],
                 classify(item["text"]),
-                attachments=archive_source_attachments(ARCHIVE_DIRECTORY, item.get("attachments")),
+                attachments=archive_source_attachments(
+                    ARCHIVE_DIRECTORY, item.get("attachments"), request.state.owner_id
+                ),
                 source="classroom",
                 source_id=item["id"],
                 owner_id=request.state.owner_id,
@@ -398,10 +406,10 @@ async def upload_study_materials(request: Request) -> dict[str, list[dict]]:
     try:
         form = await request.form()
         question_bank, question_bank_archived_path = await _read_and_archive_text_upload(
-            form.get("question_bank"), "question_bank"
+            form.get("question_bank"), "question_bank", request.state.owner_id
         )
         unit_notes, unit_notes_archived_path = await _read_and_archive_text_upload(
-            form.get("unit_notes"), "unit_notes"
+            form.get("unit_notes"), "unit_notes", request.state.owner_id
         )
         topics = build_study_plan(question_bank, unit_notes)
         return {
@@ -423,28 +431,35 @@ def study_plan(request: Request) -> dict[str, list[dict]]:
 
 @app.get("/archive")
 def list_archive(request: Request) -> dict[str, list[dict]]:
-    """List locally retained files that are still available to download."""
-    attachments = [
-        attachment for attachment in get_archived_attachments(request.state.owner_id)
-        if (ARCHIVE_DIRECTORY / attachment["archived_path"]).is_file()
-    ]
+    """List the caller's retained files that are still available to download."""
+    try:
+        attachments = [
+            attachment for attachment in get_archived_attachments(request.state.owner_id)
+            if archived_file_exists(ARCHIVE_DIRECTORY, attachment["archived_path"], request.state.owner_id)
+        ]
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     return {"attachments": attachments}
 
 
 @app.get("/archive/{filename}")
-def download_archive(filename: str, request: Request) -> FileResponse:
-    """Serve one locally archived attachment without permitting path traversal."""
+def download_archive(filename: str, request: Request) -> Response:
+    """Serve one owner-scoped archived attachment without public storage URLs."""
     if not filename or "/" in filename or "\\" in filename or ".." in filename:
         raise HTTPException(status_code=400, detail="Invalid archive filename.")
     if filename not in {attachment["archived_path"] for attachment in get_archived_attachments(request.state.owner_id)}:
         raise HTTPException(status_code=404, detail="Archived file not found.")
-    archived_file = ARCHIVE_DIRECTORY / filename
-    if not archived_file.is_file():
+    try:
+        archived_bytes = read_archived_file(ARCHIVE_DIRECTORY, filename, request.state.owner_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if archived_bytes is None:
         raise HTTPException(status_code=404, detail="Archived file not found.")
-    return FileResponse(
-        archived_file,
-        filename=original_filename_from_archive(filename),
+    download_name = original_filename_from_archive(filename).replace('"', "")
+    return Response(
+        content=archived_bytes,
         media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{download_name}"'},
     )
 
 
@@ -520,7 +535,9 @@ def _parse_deadline(deadline: str | None) -> date | None:
     return candidate if candidate >= today else candidate.replace(year=today.year + 1)
 
 
-async def _read_and_archive_text_upload(uploaded_file: object, field_name: str) -> tuple[str, str]:
+async def _read_and_archive_text_upload(
+    uploaded_file: object, field_name: str, owner_id: str = DEFAULT_OWNER_ID
+) -> tuple[str, str]:
     """Validate, archive, and decode one required UTF-8 .txt upload."""
     if not hasattr(uploaded_file, "filename") or not hasattr(uploaded_file, "read"):
         raise ValueError(f"Upload a .txt file using the '{field_name}' field.")
@@ -531,7 +548,7 @@ async def _read_and_archive_text_upload(uploaded_file: object, field_name: str) 
         text = file_bytes.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise ValueError(f"The '{field_name}' file must be UTF-8 encoded.") from exc
-    archived = archive_attachment(ARCHIVE_DIRECTORY, uploaded_file.filename, file_bytes, "text/plain")
+    archived = archive_attachment(ARCHIVE_DIRECTORY, uploaded_file.filename, file_bytes, "text/plain", owner_id)
     if not archived:
         raise ValueError(f"The '{field_name}' file is empty or exceeds the 20 MB archive limit.")
     return text, archived["archived_path"]

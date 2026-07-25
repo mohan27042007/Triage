@@ -5,9 +5,11 @@ This test never opens backend/triage.db or backend/archive/.
 """
 
 import gc
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import attachment_archive
 from attachment_archive import archive_attachment, archive_source_attachments
 from classroom_sync import _download_materials
 import database
@@ -51,6 +53,31 @@ class _DriveService:
         return _DriveFiles()
 
 
+class _StoredBody:
+    def __init__(self, value: bytes):
+        self.value = value
+
+    def read(self) -> bytes:
+        return self.value
+
+
+class _S3Archive:
+    def __init__(self):
+        self.objects = {}
+
+    def put_object(self, Bucket, Key, Body, ContentType):
+        self.objects[(Bucket, Key)] = {"Body": Body, "ContentType": ContentType}
+
+    def head_object(self, Bucket, Key):
+        if (Bucket, Key) not in self.objects:
+            raise FileNotFoundError(Key)
+        return {}
+
+    def get_object(self, Bucket, Key):
+        stored = self.objects[(Bucket, Key)]
+        return {"Body": _StoredBody(stored["Body"]), "ContentType": stored["ContentType"]}
+
+
 def main() -> None:
     with TemporaryDirectory() as temporary_directory:
         root = Path(temporary_directory)
@@ -72,6 +99,34 @@ def main() -> None:
         )
         assert len(attachments) == 1
         assert attachments[0]["filename"] == "notice.txt"
+
+        # Exercise the hosted object-store path without network access or real credentials.
+        fake_s3 = _S3Archive()
+        original_s3_client = attachment_archive._s3_client
+        original_backend = os.environ.get("ARCHIVE_STORAGE_BACKEND")
+        original_bucket = os.environ.get("S3_BUCKET")
+        try:
+            os.environ["ARCHIVE_STORAGE_BACKEND"] = "s3"
+            os.environ["S3_BUCKET"] = "test-bucket"
+            attachment_archive._s3_client = lambda: fake_s3
+            durable = archive_attachment(
+                archive_root, "private.pdf", b"private", "application/pdf", owner_id="student-42"
+            )
+            assert durable is not None
+            assert attachment_archive.archived_file_exists(archive_root, durable["archived_path"], "student-42")
+            assert attachment_archive.read_archived_file(archive_root, durable["archived_path"], "student-42") == b"private"
+            assert not attachment_archive.archived_file_exists(archive_root, durable["archived_path"], "student-99")
+            assert all("student-42" not in key for _, key in fake_s3.objects)
+        finally:
+            attachment_archive._s3_client = original_s3_client
+            if original_backend is None:
+                os.environ.pop("ARCHIVE_STORAGE_BACKEND", None)
+            else:
+                os.environ["ARCHIVE_STORAGE_BACKEND"] = original_backend
+            if original_bucket is None:
+                os.environ.pop("S3_BUCKET", None)
+            else:
+                os.environ["S3_BUCKET"] = original_bucket
 
         gmail_attachments = _extract_attachments(
             _GmailService(),

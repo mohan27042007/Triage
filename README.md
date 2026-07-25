@@ -19,7 +19,7 @@ Triage is a local-first AI student desk for scattered academic communication. It
 - Assignment Scaffolding that returns requirements, concepts, an approach, and test cases—not a submittable solution.
 - Local, read-only Gmail and Google Classroom sync after Google OAuth setup.
 - Clearly labelled representative WhatsApp demo data; there is no live WhatsApp integration.
-- Local archiving and authenticated download of uploaded `.txt` files plus newly synced Gmail attachments and accessible Classroom Drive files (up to 20 MB each).
+- Authenticated archiving and download of uploaded `.txt` files plus newly synced Gmail attachments and accessible Classroom Drive files (up to 20 MB each). Local development uses disk; hosted deployments can use private S3-compatible storage.
 - Shared demo-password gate, in-memory sessions, in-app deadline reminders with per-item snooze and optional browser notifications, keyboard/pulse-rail navigation, a `Ctrl/Cmd + K` command palette, theme controls, and reduced-motion support.
 
 ## Product boundaries
@@ -168,7 +168,23 @@ OAUTH_TOKEN_ENCRYPTION_KEY=...  # Fernet key, generated once and retained
 CORS_ORIGINS=https://YOUR-VERCEL-DOMAIN
 ```
 
-The browser receives the API session token only in the OAuth redirect fragment, then immediately removes it from the URL. Triage uses read-only Google scopes and does not send messages, complete external forms, or submit anything. Local desktop OAuth remains supported when hosted mode is disabled. Hosted attachment bytes still use Railway's local filesystem and are not durable object storage; a future storage task should move them to managed object storage.
+The browser receives the API session token only in the OAuth redirect fragment, then immediately removes it from the URL. Triage uses read-only Google scopes and does not send messages, complete external forms, or submit anything. Local desktop OAuth remains supported when hosted mode is disabled.
+
+### Durable hosted attachment storage
+
+By default, local development retains files in `backend/archive/`. For a hosted deployment, configure a private S3-compatible bucket (for example Cloudflare R2) in Railway:
+
+```text
+ARCHIVE_STORAGE_BACKEND=s3
+S3_BUCKET=triage-attachments
+S3_ENDPOINT_URL=https://YOUR_ACCOUNT_ID.r2.cloudflarestorage.com
+S3_REGION=auto
+S3_ACCESS_KEY_ID=...
+S3_SECRET_ACCESS_KEY=...
+S3_PREFIX=triage
+```
+
+Do not make the bucket public. Triage hashes each signed-in user's storage namespace and serves downloads only after checking the caller owns the archived-file reference in Postgres. Existing Railway-local files are not migrated automatically; newly retained files use the configured bucket after redeployment.
 
 Deadline reminders are browser-local: Triage refreshes the open queue every five minutes while the tab is open, shows due-soon items within 24 hours, and can send browser notifications only after the student explicitly enables them. It does not send email, text messages, or background push notifications after the browser is closed.
 
