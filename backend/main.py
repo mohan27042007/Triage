@@ -1,9 +1,8 @@
 """FastAPI server for the local-first Triage classification and Action Queue."""
 
 import os
-import re
 import secrets
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -37,11 +36,16 @@ from hosted_auth import (
     authorization_url,
     complete_authorization,
     configuration_error as hosted_auth_configuration_error,
+    dispatch_due_reminders,
     has_google_connection,
     initialize as initialize_hosted_auth,
     is_enabled as hosted_auth_enabled,
+    push_public_configuration,
+    remove_push_subscription,
+    save_push_subscription,
     session_user,
 )
+from reminder_schedule import parse_deadline
 from whatsapp_demo_data import WHATSAPP_DEMO_MESSAGES, WHATSAPP_DEMO_SOURCE
 from database import (
     create_assignment_help,
@@ -76,6 +80,7 @@ CORS_ORIGINS = [
     for origin in os.getenv("CORS_ORIGINS", DEFAULT_CORS_ORIGINS).split(",")
     if origin.strip()
 ]
+REMINDER_DISPATCH_SECRET = os.getenv("REMINDER_DISPATCH_SECRET", "").strip()
 
 initialize_database()
 initialize_hosted_auth()
@@ -84,7 +89,10 @@ initialize_hosted_auth()
 @app.middleware("http")
 async def require_demo_auth(request: Request, call_next):
     """Require an in-memory demo token for all non-public API routes."""
-    public_paths = {"/health", "/auth/login", "/auth/config", "/auth/google/start", "/auth/google/callback"}
+    public_paths = {
+        "/health", "/auth/login", "/auth/config", "/auth/google/start", "/auth/google/callback",
+        "/internal/reminders/dispatch",
+    }
     if request.method == "OPTIONS" or request.url.path in public_paths:
         return await call_next(request)
 
@@ -167,6 +175,52 @@ def google_auth_callback(code: str = "", state: str = "") -> RedirectResponse:
     except (RuntimeError, ValueError, OAuth2Error) as exc:
         raise HTTPException(status_code=400, detail=f"Google sign-in could not be completed: {exc}") from exc
     return RedirectResponse(f"{return_to}#oauth_token={token}", status_code=303)
+
+
+@app.get("/push/config")
+def push_config(request: Request) -> dict:
+    """Return opt-in state and public VAPID material for this signed-in user."""
+    return push_public_configuration(request.state.owner_id)
+
+
+@app.post("/push/subscribe")
+async def subscribe_push(request: Request) -> dict[str, bool]:
+    """Save an encrypted browser subscription for the current hosted user."""
+    if not request.headers.get("content-type", "").startswith("application/json"):
+        raise HTTPException(status_code=400, detail="Use application/json with a browser PushSubscription.")
+    try:
+        payload = await request.json()
+        if not isinstance(payload, dict):
+            raise ValueError("Push subscription must be a JSON object.")
+        save_push_subscription(request.state.owner_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"subscribed": True}
+
+
+@app.delete("/push/subscribe")
+async def unsubscribe_push(request: Request) -> Response:
+    try:
+        payload = await request.json()
+        endpoint = payload.get("endpoint") if isinstance(payload, dict) else None
+        remove_push_subscription(request.state.owner_id, endpoint)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return Response(status_code=204)
+
+
+@app.post("/internal/reminders/dispatch")
+def dispatch_reminders(request: Request) -> dict[str, int]:
+    """Run by a trusted schedule; it never accepts a browser session token."""
+    supplied_secret = request.headers.get("X-Reminder-Secret", "")
+    if not REMINDER_DISPATCH_SECRET or not secrets.compare_digest(supplied_secret, REMINDER_DISPATCH_SECRET):
+        raise HTTPException(status_code=401, detail="Invalid reminder dispatch credentials.")
+    try:
+        return dispatch_due_reminders()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.post("/ingest")
@@ -493,7 +547,7 @@ def assignment_history(request: Request) -> dict[str, list[dict]]:
 
 def _queue_group(item: dict) -> str:
     """Assign a queue group without guessing when a model deadline is unclear."""
-    deadline_date = _parse_deadline(item.get("deadline"))
+    deadline_date = parse_deadline(item.get("deadline"))
     if deadline_date is None:
         return "Immediate" if item.get("mandatory") else "Later"
 
@@ -503,34 +557,6 @@ def _queue_group(item: dict) -> str:
 
     end_of_week = today + timedelta(days=6 - today.weekday())
     return "This Week" if deadline_date <= end_of_week else "Later"
-
-
-def _parse_deadline(deadline: str | None) -> date | None:
-    """Parse common model-returned date formats; leave ambiguous strings unparsed."""
-    if not deadline:
-        return None
-
-    normalized = deadline.strip()
-    for format_string in ("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%B %d, %Y", "%b %d, %Y"):
-        try:
-            return datetime.strptime(normalized, format_string).date()
-        except ValueError:
-            pass
-
-    month_day = re.search(r"\b([A-Za-z]+)\s+(\d{1,2})\b", normalized)
-    if not month_day:
-        return None
-    try:
-        parsed = datetime.strptime(f"{month_day.group(1)} {month_day.group(2)}", "%B %d").date()
-    except ValueError:
-        try:
-            parsed = datetime.strptime(f"{month_day.group(1)} {month_day.group(2)}", "%b %d").date()
-        except ValueError:
-            return None
-
-    today = date.today()
-    candidate = parsed.replace(year=today.year)
-    return candidate if candidate >= today else candidate.replace(year=today.year + 1)
 
 
 async def _read_and_archive_text_upload(

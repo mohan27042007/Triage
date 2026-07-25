@@ -132,6 +132,8 @@ All application endpoints require a bearer session token. Local demo mode issues
 | `GET /assignment/history` | Retrieves saved assignment scaffolds. |
 | `GET /archive` | Lists locally retained files that are still available. |
 | `GET /archive/{filename}` | Downloads one authenticated locally archived file. |
+| `GET /push/config` | Returns the signed-in browser's durable-reminder availability and opt-in state. |
+| `POST /push/subscribe` | Encrypts an opted-in browser PushSubscription for its owner. |
 
 ## Deployment notes
 
@@ -186,7 +188,28 @@ S3_PREFIX=triage
 
 Do not make the bucket public. Triage hashes each signed-in user's storage namespace and serves downloads only after checking the caller owns the archived-file reference in Postgres. Existing Railway-local files are not migrated automatically; newly retained files use the configured bucket after redeployment.
 
-Deadline reminders are browser-local: Triage refreshes the open queue every five minutes while the tab is open, shows due-soon items within 24 hours, and can send browser notifications only after the student explicitly enables them. It does not send email, text messages, or background push notifications after the browser is closed.
+### Deadline reminders
+
+Triage always keeps the in-app reminder banner and opt-in browser notifications while a tab is open. In hosted mode, it can additionally use private Web Push for a signed-in student who explicitly enables it. Durable reminders are intentionally conservative: the scheduled dispatcher only sends one summary for obligations with an explicit, parseable date that are due **today** or **tomorrow**. The push payload never includes the obligation title or source content; it only asks the student to open Triage.
+
+To enable the optional hosted path, add these Railway variables after deploying this version:
+
+```text
+VAPID_PUBLIC_KEY=...
+VAPID_PRIVATE_KEY=...
+VAPID_SUBJECT=mailto:you@example.com
+REMINDER_DISPATCH_SECRET=a_long_random_secret
+REMINDER_TIMEZONE=Asia/Kolkata
+```
+
+Generate the VAPID pair once from the project backend, then keep the printed values private:
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe generate_vapid_keys.py
+```
+
+Then configure a trusted scheduler to `POST https://YOUR-RAILWAY-DOMAIN/internal/reminders/dispatch` every hour with the header `X-Reminder-Secret` set to that same secret. The dispatch endpoint has no browser-session bypass: it accepts only that secret, and does not send email, SMS, WhatsApp messages, or submit anything externally. Without these variables and scheduler, the existing tab-open reminder behavior remains unchanged.
 
 ## How Codex was used
 

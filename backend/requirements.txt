@@ -11,3 +11,4 @@ psycopg[binary]
 boto3
 PyMuPDF
 python-docx
+pywebpush

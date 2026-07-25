@@ -83,6 +83,7 @@ let deadlineRemindersEnabled = localStorage.getItem("triage-deadline-reminders")
 let currentUrgentItems = [];
 let reminderPollingTimer = null;
 let streamPollingTimer = null;
+let pushReminderConfig = { enabled: false, subscribed: false, public_key: "", detail: "" };
 const reminderNotificationsStorageKey = "triage-notified-deadline-reminders";
 const reminderSnoozesStorageKey = "triage-deadline-reminder-snoozes";
 const reminderCheckIntervalMs = 5 * 60 * 1000;
@@ -269,6 +270,7 @@ function loadAppData() {
   loadArchive();
   loadConnectedSourcesPanel();
   loadProfile();
+  loadPushReminderConfig();
 }
 
 function startDeadlineReminderPolling() {
@@ -1080,25 +1082,61 @@ function notifyNewUrgentItems(urgentItems) {
   }
 }
 
-function requestReminderNotifications() {
+async function loadPushReminderConfig() {
+  if (!authToken) return;
+  try {
+    const response = await apiFetch(apiUrl("/push/config"));
+    const data = await response.json();
+    if (response.ok && data && typeof data === "object") pushReminderConfig = { ...pushReminderConfig, ...data };
+  } catch {
+    // The local browser-notification fallback is still available.
+  }
+  updateDeadlineNotificationStatus();
+}
+
+function base64UrlToUint8Array(value) {
+  const padded = `${value}${"=".repeat((4 - (value.length % 4)) % 4)}`.replace(/-/g, "+").replace(/_/g, "/");
+  const binary = window.atob(padded);
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+}
+
+async function requestReminderNotifications() {
   if (!("Notification" in window)) {
     deadlineNotificationStatus.textContent = "This browser does not support notifications.";
     return;
   }
-  if (Notification.permission !== "default") {
+  if (Notification.permission === "denied") {
     updateDeadlineNotificationStatus();
     return;
   }
   try {
-    const permissionRequest = Notification.requestPermission();
-    if (permissionRequest?.then) {
-      permissionRequest.then((permission) => {
-        updateDeadlineNotificationStatus();
-        if (permission === "granted") notifyNewUrgentItems(currentUrgentItems);
-      }).catch(() => {});
+    const permission = Notification.permission === "granted"
+      ? "granted"
+      : await Notification.requestPermission();
+    if (permission !== "granted") {
+      updateDeadlineNotificationStatus();
+      return;
     }
+    if (pushReminderConfig.enabled && "serviceWorker" in navigator) {
+      const registration = await navigator.serviceWorker.register("/service-worker.js");
+      const subscription = await registration.pushManager.getSubscription()
+        || await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: base64UrlToUint8Array(pushReminderConfig.public_key),
+        });
+      const response = await apiFetch(apiUrl("/push/subscribe"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(subscription.toJSON()),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Could not save this browser for durable reminders.");
+      pushReminderConfig.subscribed = true;
+    }
+    notifyNewUrgentItems(currentUrgentItems);
+    updateDeadlineNotificationStatus();
   } catch {
-    deadlineNotificationStatus.textContent = "Notification permission could not be requested.";
+    deadlineNotificationStatus.textContent = "Notification permission was enabled, but durable reminders could not be set up for this browser.";
   }
 }
 
@@ -1110,18 +1148,28 @@ function updateDeadlineNotificationStatus() {
     return;
   }
   const permission = Notification.permission;
-  enableDeadlineNotifications.disabled = permission !== "default";
+  const durableConfigured = pushReminderConfig.enabled;
+  const durableSubscribed = durableConfigured && pushReminderConfig.subscribed;
+  enableDeadlineNotifications.disabled = permission === "denied" || durableSubscribed;
   enableDeadlineNotifications.classList.toggle("is-enabled", permission === "granted");
-  enableDeadlineNotifications.textContent = permission === "granted"
-    ? "Browser notifications enabled"
+  enableDeadlineNotifications.textContent = durableSubscribed
+    ? "✓ Durable reminders enabled"
+    : permission === "granted"
+      ? durableConfigured ? "Finish enabling durable reminders" : "Browser notifications enabled"
     : permission === "denied"
       ? "Browser notifications blocked"
       : "Enable browser notifications";
-  deadlineNotificationStatus.textContent = permission === "granted"
-    ? "Browser notifications are enabled for new due-soon deadlines."
+  deadlineNotificationStatus.textContent = durableSubscribed
+    ? "This browser will receive one private reminder summary when obligations are due today or tomorrow."
+    : permission === "granted"
+    ? durableConfigured
+      ? "Browser alerts are on. Click once more to save this browser for durable reminders."
+      : "Browser notifications are enabled for new due-soon deadlines while Triage is open."
     : permission === "denied"
       ? "Browser notifications are blocked. You can change this in browser site settings."
-      : "Optional: enable a browser alert for new deadlines due within 24 hours.";
+      : durableConfigured
+        ? "Optional: enable browser alerts and save this browser for private durable deadline reminders."
+        : "Optional: enable a browser alert for new deadlines due within 24 hours.";
 }
 
 deadlineReminderNavigate.addEventListener("click", () => {

@@ -8,6 +8,7 @@ import json
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from urllib.parse import urlparse
 
 try:
@@ -21,7 +22,14 @@ except ImportError:
     id_token = None
     Flow = None
 
+try:
+    from pywebpush import WebPushException, webpush
+except ImportError:
+    WebPushException = Exception
+    webpush = None
+
 from google_client import GOOGLE_SCOPES
+from reminder_schedule import parse_deadline, reminder_window
 
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "").rstrip("/")
@@ -32,6 +40,10 @@ TOKEN_ENCRYPTION_KEY = os.getenv("OAUTH_TOKEN_ENCRYPTION_KEY", "").strip()
 HOSTED_AUTH_ENABLED = os.getenv("HOSTED_AUTH_ENABLED", "").lower() == "true"
 SESSION_LIFETIME_DAYS = 30
 STATE_LIFETIME_MINUTES = 10
+VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY", "").strip()
+VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY", "").strip()
+VAPID_SUBJECT = os.getenv("VAPID_SUBJECT", "").strip()
+REMINDER_TIMEZONE = os.getenv("REMINDER_TIMEZONE", "UTC").strip() or "UTC"
 
 # Google can return canonical equivalents of requested scopes. For example, it
 # returns the userinfo URLs for the OpenID ``email`` and ``profile`` aliases.
@@ -71,6 +83,28 @@ def configuration_error() -> str | None:
     return None
 
 
+def push_configuration_error() -> str | None:
+    """Return a safe explanation when durable push is not configured."""
+    if not HOSTED_AUTH_ENABLED:
+        return "Durable reminders require hosted authentication."
+    missing = [
+        name for name, value in {
+            "VAPID_PUBLIC_KEY": VAPID_PUBLIC_KEY,
+            "VAPID_PRIVATE_KEY": VAPID_PRIVATE_KEY,
+            "VAPID_SUBJECT": VAPID_SUBJECT,
+        }.items() if not value
+    ]
+    if missing:
+        return f"Durable reminders are not configured ({', '.join(missing)} missing)."
+    if webpush is None:
+        return "Durable reminder dependency is not installed."
+    try:
+        ZoneInfo(REMINDER_TIMEZONE)
+    except ZoneInfoNotFoundError:
+        return "REMINDER_TIMEZONE must be a valid IANA timezone."
+    return None
+
+
 def initialize() -> None:
     """Create hosted-only account tables when the feature is configured."""
     if not HOSTED_AUTH_ENABLED:
@@ -103,6 +137,21 @@ def initialize() -> None:
             CREATE TABLE IF NOT EXISTS oauth_states (
                 state_hash TEXT PRIMARY KEY, code_verifier TEXT NOT NULL, return_to TEXT NOT NULL,
                 expires_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS push_subscriptions (
+                id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                endpoint_hash TEXT NOT NULL UNIQUE, encrypted_subscription BYTEA NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS reminder_deliveries (
+                user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                reminder_window TEXT NOT NULL, reminder_date DATE NOT NULL,
+                delivered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                PRIMARY KEY (user_id, reminder_window, reminder_date)
             )
         """)
 
@@ -218,6 +267,158 @@ def save_credentials_json(owner_id: str, value: str) -> None:
             "UPDATE google_connections SET encrypted_credentials = %s, updated_at = NOW() WHERE user_id = %s",
             (_fernet().encrypt(value.encode("utf-8")), owner_id),
         )
+
+
+def push_public_configuration(owner_id: str) -> dict[str, object]:
+    """Expose only the public VAPID key and current opt-in state to its owner."""
+    error = push_configuration_error()
+    subscribed = False
+    if HOSTED_AUTH_ENABLED:
+        with _connection() as connection:
+            subscribed = connection.execute(
+                "SELECT 1 FROM push_subscriptions WHERE user_id = %s", (owner_id,)
+            ).fetchone() is not None
+    return {
+        "enabled": error is None,
+        "public_key": VAPID_PUBLIC_KEY if error is None else "",
+        "subscribed": subscribed,
+        "detail": error,
+    }
+
+
+def save_push_subscription(owner_id: str, subscription: dict[str, object]) -> None:
+    """Encrypt one browser PushSubscription; endpoint contents never leave the server."""
+    error = push_configuration_error()
+    if error:
+        raise RuntimeError(error)
+    endpoint = subscription.get("endpoint") if isinstance(subscription, dict) else None
+    keys = subscription.get("keys") if isinstance(subscription, dict) else None
+    if not isinstance(endpoint, str) or not endpoint.startswith("https://"):
+        raise ValueError("Push subscription must contain a secure browser endpoint.")
+    if not isinstance(keys, dict) or not all(isinstance(keys.get(name), str) and keys[name] for name in ("p256dh", "auth")):
+        raise ValueError("Push subscription is missing browser encryption keys.")
+    encoded = json.dumps(subscription, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    with _connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO push_subscriptions (user_id, endpoint_hash, encrypted_subscription)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (endpoint_hash) DO UPDATE
+            SET user_id = EXCLUDED.user_id, encrypted_subscription = EXCLUDED.encrypted_subscription, updated_at = NOW()
+            """,
+            (owner_id, _hash(endpoint), _fernet().encrypt(encoded)),
+        )
+
+
+def remove_push_subscription(owner_id: str, endpoint: str) -> None:
+    if not isinstance(endpoint, str) or not endpoint:
+        raise ValueError("Push subscription endpoint is required.")
+    with _connection() as connection:
+        connection.execute(
+            "DELETE FROM push_subscriptions WHERE user_id = %s AND endpoint_hash = %s",
+            (owner_id, _hash(endpoint)),
+        )
+
+
+def dispatch_due_reminders(now: datetime | None = None) -> dict[str, int]:
+    """Send one privacy-preserving today/tomorrow summary per opted-in user.
+
+    This function is intentionally invoked by an authenticated scheduler, not
+    by a browser request.  It only considers open obligations with explicit
+    parseable dates and never includes obligation text in push payloads.
+    """
+    error = push_configuration_error()
+    if error:
+        raise RuntimeError(error)
+    local_now = (now or _utc_now()).astimezone(ZoneInfo(REMINDER_TIMEZONE))
+    today = local_now.date()
+    with _connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT DISTINCT i.id, i.owner_id, i.deadline
+            FROM items AS i
+            JOIN push_subscriptions AS p ON p.user_id = i.owner_id::BIGINT
+            WHERE i.category = 'Obligation' AND i.status = 'open' AND i.deadline IS NOT NULL
+            """
+        ).fetchall()
+
+    due_by_user: dict[tuple[str, str], list[dict]] = {}
+    for row in rows:
+        window = reminder_window(parse_deadline(row["deadline"], today), today)
+        if window:
+            due_by_user.setdefault((str(row["owner_id"]), window), []).append(row)
+
+    sent = 0
+    skipped = 0
+    for (owner_id, window), due_items in due_by_user.items():
+        if not _claim_reminder_delivery(owner_id, window, today):
+            skipped += 1
+            continue
+        delivered = _send_reminder_to_subscriptions(owner_id, window, len(due_items))
+        if delivered:
+            sent += delivered
+        else:
+            _release_reminder_delivery(owner_id, window, today)
+    return {"sent": sent, "skipped": skipped, "eligible_users": len(due_by_user)}
+
+
+def _claim_reminder_delivery(owner_id: str, window: str, reminder_date) -> bool:
+    with _connection() as connection:
+        row = connection.execute(
+            """
+            INSERT INTO reminder_deliveries (user_id, reminder_window, reminder_date)
+            VALUES (%s, %s, %s)
+            ON CONFLICT DO NOTHING
+            RETURNING user_id
+            """,
+            (owner_id, window, reminder_date),
+        ).fetchone()
+    return row is not None
+
+
+def _release_reminder_delivery(owner_id: str, window: str, reminder_date) -> None:
+    with _connection() as connection:
+        connection.execute(
+            "DELETE FROM reminder_deliveries WHERE user_id = %s AND reminder_window = %s AND reminder_date = %s",
+            (owner_id, window, reminder_date),
+        )
+
+
+def _send_reminder_to_subscriptions(owner_id: str, window: str, item_count: int) -> int:
+    with _connection() as connection:
+        rows = connection.execute(
+            "SELECT id, encrypted_subscription FROM push_subscriptions WHERE user_id = %s", (owner_id,)
+        ).fetchall()
+    payload = json.dumps({
+        "title": "Triage deadline reminder",
+        "body": f"{item_count} obligation{' is' if item_count == 1 else 's are'} due {window}. Open Triage to review.",
+        "url": FRONTEND_ORIGIN,
+    })
+    delivered = 0
+    for row in rows:
+        try:
+            subscription = json.loads(_fernet().decrypt(bytes(row["encrypted_subscription"])).decode("utf-8"))
+            webpush(
+                subscription_info=subscription,
+                data=payload,
+                vapid_private_key=VAPID_PRIVATE_KEY,
+                vapid_claims={"sub": VAPID_SUBJECT},
+            )
+            delivered += 1
+        except WebPushException as exc:
+            status_code = getattr(getattr(exc, "response", None), "status_code", None)
+            if status_code in (404, 410):
+                with _connection() as connection:
+                    connection.execute("DELETE FROM push_subscriptions WHERE id = %s", (row["id"],))
+        except (ValueError, TypeError, json.JSONDecodeError):
+            # A corrupt or obsolete subscription is removed; no item data is exposed.
+            with _connection() as connection:
+                connection.execute("DELETE FROM push_subscriptions WHERE id = %s", (row["id"],))
+        except Exception:
+            # Temporary provider/network failure: retain the subscription and
+            # release the delivery claim so the next scheduled run can retry.
+            continue
+    return delivered
 
 
 def _flow() -> Flow:
