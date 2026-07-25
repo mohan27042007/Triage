@@ -10,6 +10,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from dotenv import load_dotenv
+from oauthlib.oauth2.rfc6749.errors import OAuth2Error
 
 load_dotenv()
 
@@ -157,8 +158,8 @@ def google_auth_callback(code: str = "", state: str = "") -> RedirectResponse:
         raise HTTPException(status_code=400, detail="Google sign-in did not return code and state.")
     try:
         return_to, token = complete_authorization(code, state)
-    except (RuntimeError, ValueError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (RuntimeError, ValueError, OAuth2Error) as exc:
+        raise HTTPException(status_code=400, detail=f"Google sign-in could not be completed: {exc}") from exc
     return RedirectResponse(f"{return_to}#oauth_token={token}", status_code=303)
 
 

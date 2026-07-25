@@ -33,6 +33,14 @@ HOSTED_AUTH_ENABLED = os.getenv("HOSTED_AUTH_ENABLED", "").lower() == "true"
 SESSION_LIFETIME_DAYS = 30
 STATE_LIFETIME_MINUTES = 10
 
+# Google can return canonical equivalents of requested scopes. For example, it
+# returns the userinfo URLs for the OpenID ``email`` and ``profile`` aliases.
+# oauthlib treats that valid normalization as an exception unless this flag is
+# set. Triage still stores the scopes Google actually granted and the Google
+# APIs enforce those grants on every read-only source request.
+if HOSTED_AUTH_ENABLED:
+    os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
+
 
 def is_enabled() -> bool:
     return HOSTED_AUTH_ENABLED
