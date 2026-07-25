@@ -110,7 +110,7 @@
         </header>
         <p class="eyebrow">STREAM / INGEST</p>
         <h2 id="stream-title">What needs your attention?</h2>
-        <p class="intro">Paste a college message or upload a UTF-8 <code>.txt</code> file.</p>
+        <p class="intro">Paste a college message or upload a <code>.txt</code>, selectable-text <code>.pdf</code>, or <code>.docx</code> file.</p>
 
         <form id="ingest-form">
           <label for="text">Message text</label>
@@ -118,8 +118,8 @@
 
           <p class="divider"><span>or</span></p>
 
-          <label for="file">Text file</label>
-          <input id="file" name="file" type="file" accept=".txt,text/plain" />
+          <label for="file">Document</label>
+          <input id="file" name="file" type="file" accept=".txt,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
 
           <button type="submit">Classify with Triage</button>
         </form>
@@ -169,10 +169,10 @@
         <h2 id="study-title">Rank the topics worth studying</h2>
         <p class="intro">Upload a question bank and its unit notes. Triage returns a topic outline, never full answers.</p>
         <form id="study-form">
-          <label for="question-bank">Question bank (.txt)</label>
-          <input id="question-bank" name="question_bank" type="file" accept=".txt,text/plain" required />
-          <label for="unit-notes">Unit notes (.txt)</label>
-          <input id="unit-notes" name="unit_notes" type="file" accept=".txt,text/plain" required />
+          <label for="question-bank">Question bank (.txt, .pdf, or .docx)</label>
+          <input id="question-bank" name="question_bank" type="file" accept=".txt,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required />
+          <label for="unit-notes">Unit notes (.txt, .pdf, or .docx)</label>
+          <input id="unit-notes" name="unit_notes" type="file" accept=".txt,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required />
           <button type="submit">Build study plan</button>
         </form>
         <p id="study-error" class="error" role="alert"></p>

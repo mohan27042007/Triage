@@ -26,7 +26,7 @@ The key safety mechanism is Human Review. Triage can draft a copy-only response 
 
 ### Ingestion and classification
 
-- Manual text paste and UTF-8 `.txt` uploads.
+- Manual text paste plus `.txt`, selectable-text PDF, and DOCX uploads for classification and study planning. Image-only/scanned PDFs are intentionally rejected rather than OCR-guessed.
 - Read-only Gmail and Google Classroom sync in the local OAuth setup.
 - Clearly marked representative WhatsApp demo data, not a live WhatsApp connection.
 - A unified source-labelled stream of recently classified items, refreshed by the open browser every 30 seconds.

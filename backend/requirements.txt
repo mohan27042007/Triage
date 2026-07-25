@@ -9,3 +9,5 @@ google-api-python-client
 cryptography
 psycopg[binary]
 boto3
+PyMuPDF
+python-docx

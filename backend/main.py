@@ -15,6 +15,7 @@ from oauthlib.oauth2.rfc6749.errors import OAuth2Error
 load_dotenv()
 
 from attachment_archive import (
+    MAX_ARCHIVE_BYTES,
     archive_attachment,
     archived_file_exists,
     archive_source_attachments,
@@ -29,6 +30,7 @@ from classifier import (
     draft_routine_form_response,
 )
 from classroom_sync import fetch_recent_classroom_items
+from document_ingestion import extract_document_text
 from gmail_sync import fetch_recent_gmail_messages
 from google_client import TOKEN_PATH
 from hosted_auth import (
@@ -66,6 +68,8 @@ app = FastAPI(title="Triage API", version="0.1.0")
 DEMO_PASSWORD = os.getenv("DEMO_PASSWORD", "")
 VALID_SESSION_TOKENS: set[str] = set()
 ARCHIVE_DIRECTORY = Path(__file__).with_name("archive")
+MAX_CLASSIFICATION_TEXT_CHARS = 5_000
+MAX_STUDY_DOCUMENT_TEXT_CHARS = 30_000
 DEFAULT_CORS_ORIGINS = "http://localhost:3000,http://127.0.0.1:3000"
 CORS_ORIGINS = [
     origin.strip()
@@ -167,7 +171,7 @@ def google_auth_callback(code: str = "", state: str = "") -> RedirectResponse:
 
 @app.post("/ingest")
 async def ingest(request: Request) -> dict:
-    """Accept pasted JSON text or one UTF-8 .txt upload and classify it."""
+    """Accept pasted text or one TXT, selectable-text PDF, or DOCX upload."""
     content_type = request.headers.get("content-type", "")
 
     try:
@@ -182,21 +186,15 @@ async def ingest(request: Request) -> dict:
             form = await request.form()
             uploaded_file = form.get("file")
             if not hasattr(uploaded_file, "filename") or not uploaded_file.filename:
-                raise ValueError(
-                    "Upload a .txt file using the 'file' field."
-                )
-            if Path(uploaded_file.filename).suffix.lower() != ".txt":
-                raise ValueError(
-                    "Only .txt files are supported in this local-first slice."
-                )
+                raise ValueError("Upload a TXT, PDF, or DOCX file using the 'file' field.")
             text, archived_path = await _read_and_archive_text_upload(
                 uploaded_file, "file", request.state.owner_id
             )
         else:
             raise ValueError("Use application/json or multipart/form-data.")
 
-        if len(text) > 5000:
-            raise ValueError("Text is too long for classification.")
+        if len(text) > MAX_CLASSIFICATION_TEXT_CHARS:
+            raise ValueError(f"Text is too long for classification ({MAX_CLASSIFICATION_TEXT_CHARS:,} characters maximum).")
 
         classification = classify(text)
         return create_item(
@@ -399,17 +397,17 @@ def reject_action(action_id: int, request: Request) -> dict:
 
 @app.post("/study/upload")
 async def upload_study_materials(request: Request) -> dict[str, list[dict]]:
-    """Build and persist a topic-ranked plan from two local text files."""
+    """Build a topic-ranked plan from two TXT, PDF, or DOCX study documents."""
     if not request.headers.get("content-type", "").startswith("multipart/form-data"):
         raise HTTPException(status_code=400, detail="Use multipart/form-data with both study files.")
 
     try:
         form = await request.form()
         question_bank, question_bank_archived_path = await _read_and_archive_text_upload(
-            form.get("question_bank"), "question_bank", request.state.owner_id
+            form.get("question_bank"), "question_bank", request.state.owner_id, MAX_STUDY_DOCUMENT_TEXT_CHARS
         )
         unit_notes, unit_notes_archived_path = await _read_and_archive_text_upload(
-            form.get("unit_notes"), "unit_notes", request.state.owner_id
+            form.get("unit_notes"), "unit_notes", request.state.owner_id, MAX_STUDY_DOCUMENT_TEXT_CHARS
         )
         topics = build_study_plan(question_bank, unit_notes)
         return {
@@ -536,19 +534,24 @@ def _parse_deadline(deadline: str | None) -> date | None:
 
 
 async def _read_and_archive_text_upload(
-    uploaded_file: object, field_name: str, owner_id: str = DEFAULT_OWNER_ID
+    uploaded_file: object,
+    field_name: str,
+    owner_id: str = DEFAULT_OWNER_ID,
+    max_text_chars: int = MAX_CLASSIFICATION_TEXT_CHARS,
 ) -> tuple[str, str]:
-    """Validate, archive, and decode one required UTF-8 .txt upload."""
+    """Validate, archive, and extract bounded text from one supported upload."""
     if not hasattr(uploaded_file, "filename") or not hasattr(uploaded_file, "read"):
-        raise ValueError(f"Upload a .txt file using the '{field_name}' field.")
-    if not uploaded_file.filename or Path(uploaded_file.filename).suffix.lower() != ".txt":
-        raise ValueError(f"The '{field_name}' file must use the .txt extension.")
+        raise ValueError(f"Upload a TXT, PDF, or DOCX file using the '{field_name}' field.")
+    if not uploaded_file.filename:
+        raise ValueError(f"Upload a TXT, PDF, or DOCX file using the '{field_name}' field.")
     try:
         file_bytes = await uploaded_file.read()
-        text = file_bytes.decode("utf-8")
-    except UnicodeDecodeError as exc:
-        raise ValueError(f"The '{field_name}' file must be UTF-8 encoded.") from exc
-    archived = archive_attachment(ARCHIVE_DIRECTORY, uploaded_file.filename, file_bytes, "text/plain", owner_id)
+        if len(file_bytes) > MAX_ARCHIVE_BYTES:
+            raise ValueError(f"The '{field_name}' file exceeds the 20 MB archive limit.")
+        text, mime_type = extract_document_text(uploaded_file.filename, file_bytes, max_text_chars)
+    except ValueError as exc:
+        raise ValueError(f"The '{field_name}' file could not be used: {exc}") from exc
+    archived = archive_attachment(ARCHIVE_DIRECTORY, uploaded_file.filename, file_bytes, mime_type, owner_id)
     if not archived:
         raise ValueError(f"The '{field_name}' file is empty or exceeds the 20 MB archive limit.")
     return text, archived["archived_path"]

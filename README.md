@@ -8,7 +8,7 @@ Triage is a local-first AI student desk for scattered academic communication. It
 
 ## What is implemented
 
-- Paste text or upload UTF-8 `.txt` files for classification.
+- Paste text or upload `.txt`, selectable-text `.pdf`, and `.docx` files for classification. PDFs with no selectable text (such as scanned pages) are rejected rather than silently guessed.
 - A unified, source-labelled live stream of recently classified Gmail, Classroom, manual-upload, and WhatsApp-demo items. It refreshes every 30 seconds while the app tab is open; this is local polling, not a webhook feed.
 - A dedicated Archive / History panel with local search and source, classification, and open/done filters; retained files remain downloadable from matching records.
 - Structured OpenAI classification with category, evidence-based reason, explicit deadline, mandatory/optional status, and poll/form detection.
@@ -19,7 +19,7 @@ Triage is a local-first AI student desk for scattered academic communication. It
 - Assignment Scaffolding that returns requirements, concepts, an approach, and test cases—not a submittable solution.
 - Local, read-only Gmail and Google Classroom sync after Google OAuth setup.
 - Clearly labelled representative WhatsApp demo data; there is no live WhatsApp integration.
-- Authenticated archiving and download of uploaded `.txt` files plus newly synced Gmail attachments and accessible Classroom Drive files (up to 20 MB each). Local development uses disk; hosted deployments can use private S3-compatible storage.
+- Authenticated archiving and download of uploaded `.txt`, `.pdf`, and `.docx` files plus newly synced Gmail attachments and accessible Classroom Drive files (up to 20 MB each). Local development uses disk; hosted deployments can use private S3-compatible storage.
 - Shared demo-password gate, in-memory sessions, in-app deadline reminders with per-item snooze and optional browser notifications, keyboard/pulse-rail navigation, a `Ctrl/Cmd + K` command palette, theme controls, and reduced-motion support.
 
 ## Product boundaries
@@ -114,7 +114,7 @@ All application endpoints require a bearer session token. Local demo mode issues
 | `POST /auth/login` | Exchanges the shared demo password for an in-memory token. |
 | `GET /auth/google/start` | Starts hosted Google OAuth when deployment configuration enables it. |
 | `GET /auth/google/callback` | Completes hosted OAuth and returns a fragment-only API session token. |
-| `POST /ingest` | Classifies pasted JSON text or an uploaded UTF-8 `.txt` file. |
+| `POST /ingest` | Classifies pasted JSON text or an uploaded `.txt`, selectable-text `.pdf`, or `.docx` file. |
 | `GET /queue` | Returns open obligations grouped by urgency. |
 | `GET /stream` | Returns the newest classified items across all available sources. |
 | `GET /history` | Searches local item history by text, source, classification, and status. |
@@ -126,7 +126,7 @@ All application endpoints require a bearer session token. Local demo mode issues
 | `POST /sources/gmail/sync` | Imports newly seen Gmail inbox messages after local OAuth. |
 | `POST /sources/classroom/sync` | Imports Classroom announcements and coursework after local OAuth. |
 | `POST /sources/whatsapp/demo-load` | Loads representative, simulated WhatsApp messages once. |
-| `POST /study/upload` | Builds and stores a ranked study plan from two UTF-8 `.txt` files. |
+| `POST /study/upload` | Builds and stores a ranked study plan from two `.txt`, selectable-text `.pdf`, or `.docx` files. |
 | `GET /study/plan` | Retrieves the latest stored study plan. |
 | `POST /assignment/help` | Creates and stores a planning-only assignment scaffold. |
 | `GET /assignment/history` | Retrieves saved assignment scaffolds. |
