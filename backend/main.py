@@ -59,6 +59,7 @@ from database import (
     has_items_from_source,
     get_assignment_history,
     get_archived_attachments,
+    export_owner_data,
     get_open_obligations,
     get_history_items,
     get_recent_items,
@@ -230,6 +231,16 @@ def logout(request: Request) -> Response:
     else:
         VALID_SESSION_TOKENS.discard(token)
     return Response(status_code=204)
+
+
+@app.get("/account/export")
+def export_account_data(request: Request) -> JSONResponse:
+    """Download the signed-in student's data metadata without exposing archive bytes."""
+    exported = export_owner_data(request.state.owner_id)
+    return JSONResponse(
+        content=exported,
+        headers={"Content-Disposition": 'attachment; filename="triage-data-export.json"'},
+    )
 
 
 @app.get("/auth/config")

@@ -132,6 +132,7 @@ All application endpoints require a bearer session token. Local demo mode issues
 | `GET /assignment/history` | Retrieves saved assignment scaffolds. |
 | `GET /archive` | Lists locally retained files that are still available. |
 | `GET /archive/{filename}` | Downloads one authenticated locally archived file. |
+| `GET /account/export` | Downloads the signed-in student's portable metadata export. |
 | `GET /push/config` | Returns the signed-in browser's durable-reminder availability and opt-in state. |
 | `POST /push/subscribe` | Encrypts an opted-in browser PushSubscription for its owner. |
 
@@ -175,6 +176,12 @@ The browser receives the API session token only in the OAuth redirect fragment, 
 ### Production hardening
 
 The API returns `no-store`, clickjacking, content-type, referrer, and unused-permission protections on every response. Sensitive endpoints have conservative process-local rate limits; on Railway set `TRUST_PROXY_HEADERS=true` so limits distinguish visitors behind Railway's proxy. The current browser's **Sign out** button now invalidates its hosted session in Postgres (or removes its local demo session). For multiple replicas or public scale, add a shared edge/WAF rate limit and managed monitoring rather than relying only on the in-process limiter.
+
+### Data lifecycle, export, and backups
+
+Triage now records an additive schema-migration ledger (`schema_migrations`) whenever it initializes a database. It never drops tables or deletes student records as part of a migration. A signed-in student can download `GET /account/export` to receive their items, review history, study plan, assignment scaffolds, archive manifest, and applied migration IDs as JSON. Archive file bytes and browser-only routine-form details are deliberately excluded from that export.
+
+The retention policy is conservative: Triage does **not** silently expire or delete records or retained files. Local SQLite and `backend/archive/` remain the student's responsibility to back up; do not copy a live SQLite file while Triage is writing to it. For Railway Postgres, enable the provider's database backup/snapshot capability before relying on hosted data, test restoring into a separate environment, and retain the export file separately. A future hosted object-storage configuration should use lifecycle rules chosen by the student/institution rather than automatic app deletion.
 
 ### Durable hosted attachment storage
 

@@ -31,7 +31,7 @@ The key safety mechanism is Human Review. Triage can draft a copy-only response 
 - Clearly marked representative WhatsApp demo data, not a live WhatsApp connection.
 - A unified source-labelled stream of recently classified items, refreshed by the open browser every 30 seconds.
 - OpenAI structured-output classification with category, reason, deadline, mandatory status, and poll/form detection.
-- SQLite/Postgres persistence, source IDs for deduplication, and a private attachment archive: uploaded text files, newly synced Gmail attachments, and accessible Classroom Drive files are retained up to 20 MB each and remain downloadable. Local mode uses disk; hosted mode can use a private S3-compatible bucket.
+- SQLite/Postgres persistence, source IDs for deduplication, an additive schema-migration ledger, and a private attachment archive: uploaded text files, newly synced Gmail attachments, and accessible Classroom Drive files are retained up to 20 MB each and remain downloadable. Local mode uses disk; hosted mode can use a private S3-compatible bucket. Student-scoped metadata export is available without exposing archive bytes or browser-only profile details.
 
 ### Student desk
 
@@ -73,7 +73,7 @@ Codex was the primary engineering collaborator for this solo build. It helped tr
 
 ## Next steps
 
-1. Add storage lifecycle rules, malware scanning, retention controls, and broader file preview support.
+1. Configure provider backups and object-storage lifecycle rules, then add malware scanning, retention controls, and broader file preview support.
 2. Add real-time source webhooks where available, robust connection health, retry states, broader accessibility testing, and fuller archive-history retention controls.
 3. Investigate a reliable, policy-compliant WhatsApp integration without compromising the stable demo path.
 4. Add more supported routine-form fields only after confirming their privacy and review requirements.

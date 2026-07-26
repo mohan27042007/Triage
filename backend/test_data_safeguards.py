@@ -1,0 +1,47 @@
+"""Isolated database checks for schema tracking and owner-scoped exports."""
+
+import gc
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+import database
+
+
+def main() -> None:
+    original_path = database.DATABASE_PATH
+    original_postgres = database.USING_POSTGRES
+    with TemporaryDirectory() as temporary_directory:
+        database.DATABASE_PATH = Path(temporary_directory) / "test-triage.db"
+        database.USING_POSTGRES = False
+        try:
+            database.initialize_database()
+            item = database.create_item(
+                "Submit the library form by 2026-08-01.",
+                {"category": "Obligation", "reason": "Explicit form deadline.", "deadline": "2026-08-01", "mandatory": True},
+                owner_id="student-a",
+            )
+            assert item is not None
+            database.create_pending_action(item["id"], "mark_done", {"item_id": item["id"]}, owner_id="student-a")
+            database.create_item(
+                "Other student's private notice.",
+                {"category": "Noise", "reason": "Not relevant.", "deadline": None, "mandatory": False},
+                owner_id="student-b",
+            )
+
+            exported = database.export_owner_data("student-a")
+            assert exported["format"] == "triage-data-export/v1"
+            assert len(exported["items"]) == 1
+            assert exported["items"][0]["text"].startswith("Submit")
+            assert len(exported["pending_actions"]) == 1
+            assert exported["schema_migrations"][0]["id"] == database.SCHEMA_MIGRATION_ID
+            assert "Archived file bytes" in exported["note"]
+        finally:
+            database.DATABASE_PATH = original_path
+            database.USING_POSTGRES = original_postgres
+            gc.collect()
+
+    print("Data safeguard checks passed.")
+
+
+if __name__ == "__main__":
+    main()

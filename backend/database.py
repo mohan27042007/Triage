@@ -12,6 +12,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 USING_POSTGRES = DATABASE_URL.startswith(("postgres://", "postgresql://"))
 DEFAULT_OWNER_ID = "local-demo"
 VALID_ITEM_SOURCES = {"manual", "gmail", "classroom", "whatsapp-demo"}
+SCHEMA_MIGRATION_ID = "2026-07-26-data-safeguards-v1"
 
 
 class _PostgresConnection:
@@ -130,6 +131,7 @@ def initialize_database() -> None:
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_items_owner_source_id "
             "ON items(owner_id, source_id) WHERE source_id IS NOT NULL"
         )
+        _record_schema_migration(connection)
 
 
 def _initialize_postgres_database() -> None:
@@ -166,6 +168,23 @@ def _initialize_postgres_database() -> None:
             )
         """)
         connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_items_owner_source_id ON items(owner_id, source_id) WHERE source_id IS NOT NULL")
+        _record_schema_migration(connection)
+
+
+def _record_schema_migration(connection) -> None:
+    """Maintain an additive schema ledger without rewriting user data."""
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            id TEXT PRIMARY KEY,
+            applied_at TEXT NOT NULL
+        )
+        """
+    )
+    connection.execute(
+        "INSERT INTO schema_migrations (id, applied_at) VALUES (?, ?) ON CONFLICT (id) DO NOTHING",
+        (SCHEMA_MIGRATION_ID, datetime.now().astimezone().isoformat()),
+    )
 
 
 def _add_column_if_missing(
@@ -568,6 +587,32 @@ def get_assignment_history(owner_id: str = DEFAULT_OWNER_ID) -> list[dict[str, A
             "SELECT * FROM assignment_help WHERE owner_id = ? ORDER BY created_at DESC, id DESC", (owner_id,)
         ).fetchall()
     return [_row_to_assignment_help(row) for row in rows]
+
+
+def export_owner_data(owner_id: str = DEFAULT_OWNER_ID) -> dict[str, Any]:
+    """Create a portable metadata export for one owner; archived bytes stay private."""
+    with _connection() as connection:
+        item_rows = connection.execute(
+            "SELECT * FROM items WHERE owner_id = ? ORDER BY created_at DESC, id DESC", (owner_id,)
+        ).fetchall()
+        action_rows = connection.execute(
+            "SELECT * FROM pending_actions WHERE owner_id = ? ORDER BY created_at DESC, id DESC", (owner_id,)
+        ).fetchall()
+        migration_rows = connection.execute(
+            "SELECT id, applied_at FROM schema_migrations ORDER BY applied_at ASC"
+        ).fetchall()
+
+    return {
+        "format": "triage-data-export/v1",
+        "exported_at": datetime.now().astimezone().isoformat(),
+        "schema_migrations": [dict(row) for row in migration_rows],
+        "items": [_row_to_item(row) for row in item_rows],
+        "pending_actions": [_row_to_pending_action(row) for row in action_rows],
+        "study_plan": get_study_plan(owner_id),
+        "assignment_scaffolds": get_assignment_history(owner_id),
+        "archive_manifest": get_archived_attachments(owner_id),
+        "note": "Archived file bytes and browser-only form details are intentionally excluded.",
+    }
 
 
 def _row_to_item(row: sqlite3.Row) -> dict[str, Any]:

@@ -62,6 +62,7 @@ const settingsDrawer = document.querySelector("#settings-drawer");
 const closeSettingsButton = document.querySelector("#close-settings");
 const profileForm = document.querySelector("#profile-form");
 const profileStatus = document.querySelector("#profile-status");
+const downloadAccountExportButton = document.querySelector("#download-account-export");
 const deadlineRemindersSetting = document.querySelector("#deadline-reminders-setting");
 const enableDeadlineNotifications = document.querySelector("#enable-deadline-notifications");
 const deadlineNotificationStatus = document.querySelector("#deadline-notification-status");
@@ -515,6 +516,31 @@ document.querySelector("#settings-sign-out").addEventListener("click", async () 
     // Removing the local session still protects this browser if it is offline.
   }
   showLandingScreen();
+});
+downloadAccountExportButton.addEventListener("click", async () => {
+  downloadAccountExportButton.disabled = true;
+  profileStatus.textContent = "Preparing your data export…";
+  try {
+    const response = await apiFetch(apiUrl("/account/export"));
+    if (!response.ok) {
+      const payload = await response.json();
+      throw new Error(payload.detail || "Could not prepare the export.");
+    }
+    const file = await response.blob();
+    const url = URL.createObjectURL(file);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "triage-data-export.json";
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    profileStatus.textContent = "Your data export has downloaded. Local form details and retained file bytes are not included.";
+  } catch (requestError) {
+    profileStatus.textContent = requestError.message;
+  } finally {
+    downloadAccountExportButton.disabled = false;
+  }
 });
 profileForm.addEventListener("submit", async (event) => {
   event.preventDefault();
