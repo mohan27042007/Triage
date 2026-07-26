@@ -33,7 +33,7 @@ def main() -> None:
             assert len(exported["items"]) == 1
             assert exported["items"][0]["text"].startswith("Submit")
             assert len(exported["pending_actions"]) == 1
-            assert exported["schema_migrations"][0]["id"] == database.SCHEMA_MIGRATION_ID
+            assert {entry["id"] for entry in exported["schema_migrations"]} == set(database.SCHEMA_MIGRATION_IDS)
             assert "Archived file bytes" in exported["note"]
         finally:
             database.DATABASE_PATH = original_path

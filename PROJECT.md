@@ -27,7 +27,7 @@ The key safety mechanism is Human Review. Triage can draft a copy-only response 
 ### Ingestion and classification
 
 - Manual text paste plus `.txt`, selectable-text PDF, and DOCX uploads for classification and study planning. Image-only/scanned PDFs are intentionally rejected rather than OCR-guessed.
-- Read-only Gmail and Google Classroom sync in the local OAuth setup.
+- Read-only Gmail and Google Classroom sync with persisted last-sync outcomes, clear setup/failure states, and explicit retry controls.
 - Clearly marked representative WhatsApp demo data, not a live WhatsApp connection.
 - A unified source-labelled stream of recently classified items, refreshed by the open browser every 30 seconds.
 - OpenAI structured-output classification with category, reason, deadline, mandatory status, and poll/form detection.
@@ -74,7 +74,7 @@ Codex was the primary engineering collaborator for this solo build. It helped tr
 ## Next steps
 
 1. Configure provider backups and object-storage lifecycle rules, then add malware scanning, retention controls, and broader file preview support.
-2. Add real-time source webhooks where available, robust connection health, retry states, broader accessibility testing, and fuller archive-history retention controls.
+2. Add real-time source webhooks where available, broader accessibility testing, and fuller archive-history retention controls. Current source health records the latest user-requested sync and offers an explicit retry; it does not background-retry external providers.
 3. Investigate a reliable, policy-compliant WhatsApp integration without compromising the stable demo path.
 4. Add more supported routine-form fields only after confirming their privacy and review requirements.
 

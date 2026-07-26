@@ -64,9 +64,11 @@ from database import (
     get_history_items,
     get_recent_items,
     get_pending_actions,
+    get_source_sync_status,
     get_study_plan,
     initialize_database,
     reject_pending_action,
+    record_source_sync,
     replace_study_plan,
     DEFAULT_OWNER_ID,
 )
@@ -385,6 +387,20 @@ def google_source_status(request: Request) -> dict[str, bool]:
     return {"authorized": has_google_connection(request.state.owner_id) if hosted_auth_enabled() else TOKEN_PATH.is_file()}
 
 
+@app.get("/sources/status")
+def source_status(request: Request) -> dict[str, object]:
+    """Return saved outcomes for user-requested Google source syncs.
+
+    Connection availability comes from the stored read-only Google grant; this
+    endpoint does not perform an external health check or trigger a sync.
+    """
+    authorized = has_google_connection(request.state.owner_id) if hosted_auth_enabled() else TOKEN_PATH.is_file()
+    return {
+        "google_authorized": authorized,
+        "sources": get_source_sync_status(request.state.owner_id),
+    }
+
+
 @app.post("/sources/gmail/sync")
 def sync_gmail(request: Request) -> dict[str, int]:
     """Classify new inbox messages while preserving Gmail IDs for deduplication."""
@@ -407,8 +423,10 @@ def sync_gmail(request: Request) -> dict[str, int]:
                 owner_id=request.state.owner_id,
             )
             processed += 1
+        record_source_sync("gmail", succeeded=True, imported_count=processed, owner_id=request.state.owner_id)
         return {"processed": processed, "skipped": skipped}
     except RuntimeError as exc:
+        record_source_sync("gmail", succeeded=False, error_message="The Gmail sync could not finish. Retry when ready.", owner_id=request.state.owner_id)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
@@ -434,8 +452,10 @@ def sync_classroom(request: Request) -> dict[str, int]:
                 owner_id=request.state.owner_id,
             )
             processed += 1
+        record_source_sync("classroom", succeeded=True, imported_count=processed, owner_id=request.state.owner_id)
         return {"processed": processed, "skipped": skipped}
     except RuntimeError as exc:
+        record_source_sync("classroom", succeeded=False, error_message="The Classroom sync could not finish. Retry when ready.", owner_id=request.state.owner_id)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 

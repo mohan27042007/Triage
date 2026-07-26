@@ -104,6 +104,7 @@ const sourceDefinitions = {
 };
 let connectedSources = loadConnectedSources();
 let googleAuthorized = false;
+let sourceSyncStatuses = {};
 let hostedAuthAvailable = false;
 let syncingSource = null;
 
@@ -843,12 +844,14 @@ function saveConnectedSources() {
 
 async function loadConnectedSourcesPanel() {
   try {
-    const response = await apiFetch(apiUrl("/sources/google/status"));
+    const response = await apiFetch(apiUrl("/sources/status"));
     const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || "Could not check Google authorization.");
-    googleAuthorized = data.authorized;
+    if (!response.ok) throw new Error(data.detail || "Could not check source connections.");
+    googleAuthorized = Boolean(data.google_authorized);
+    sourceSyncStatuses = data.sources || {};
   } catch {
     googleAuthorized = false;
+    sourceSyncStatuses = {};
   }
   renderConnectedSources();
 }
@@ -856,31 +859,34 @@ async function loadConnectedSourcesPanel() {
 function renderConnectedSources() {
   connectedSourcesList.innerHTML = Object.entries(sourceDefinitions).map(([key, source]) => {
     const state = connectedSources[key] || {};
+    const persistedStatus = sourceSyncStatuses[key] || {};
     const isSyncing = syncingSource === key;
-    const reconnectNeeded = source.google && state.connected && isReconnectDue(state.lastSynced);
+    const lastSynced = persistedStatus.last_success_at || state.lastSynced;
+    const syncFailed = source.google && Boolean(persistedStatus.last_error || state.error);
+    const reconnectNeeded = source.google && state.connected && !syncFailed && isReconnectDue(lastSynced);
     const setupRequired = source.google && !googleAuthorized;
     if (source.comingSoon) {
       return `<article class="source-card is-coming-soon" aria-disabled="true"><div><p class="source-name">${source.name}</p><p class="muted">${source.description}</p></div><span class="coming-soon-tag">Coming soon</span></article>`;
     }
     const status = isSyncing
       ? "Syncing…"
-      : state.error
-        ? state.error
+      : syncFailed
+        ? (persistedStatus.last_error || "The sync could not finish. Retry when ready.")
       : setupRequired
         ? "One-time setup required"
-        : state.connected
-          ? `Last synced: ${formatRelativeTime(state.lastSynced)}`
+        : lastSynced
+          ? `Last synced: ${formatRelativeTime(lastSynced)}${Number.isInteger(persistedStatus.last_imported_count) ? ` · ${persistedStatus.last_imported_count} new` : ""}`
           : source.demo
             ? "Load representative sample data"
             : "Turn on to sync";
     return `
-      <article class="source-card${state.connected ? " is-connected" : ""}" data-source="${key}">
+      <article class="source-card${state.connected ? " is-connected" : ""}${syncFailed ? " has-sync-error" : ""}" data-source="${key}">
         <div class="source-card-copy">
           <div class="source-title-row"><p class="source-name">${source.name}</p>${source.demo ? '<span class="demo-data-tag">Demo data</span>' : ""}</div>
           <p class="muted">${source.description}</p>
-          <p class="source-status${setupRequired ? " setup-required" : ""}">${status}</p>
+          <p class="source-status${setupRequired ? " setup-required" : ""}${syncFailed ? " sync-error" : ""}">${escapeHtml(status)}</p>
           ${setupRequired ? '<p class="source-setup">In a terminal, run <code>cd backend</code> then <code>python setup_google_auth.py</code>. Return here and turn this source on.</p>' : ""}
-          ${reconnectNeeded ? `<button class="source-reconnect" type="button" data-reconnect-source="${key}">Reconnect</button>` : ""}
+          ${syncFailed ? `<button class="source-reconnect" type="button" data-reconnect-source="${key}">Retry sync</button>` : ""}${reconnectNeeded ? `<button class="source-reconnect" type="button" data-reconnect-source="${key}">Reconnect</button>` : ""}
         </div>
         <label class="source-toggle" aria-label="${state.connected ? "Disconnect" : "Connect"} ${source.name}">
           <input type="checkbox" data-source-toggle="${key}" ${state.connected ? "checked" : ""} ${isSyncing ? "disabled" : ""} />
@@ -940,6 +946,7 @@ async function connectSource(sourceKey) {
     if (!response.ok) throw new Error(data.detail || `Could not sync ${source.name}.`);
     connectedSources[sourceKey] = { connected: true, lastSynced: new Date().toISOString() };
     saveConnectedSources();
+    await loadConnectedSourcesPanel();
     await loadQueue();
     await loadStream();
     await loadHistory();
@@ -947,6 +954,7 @@ async function connectSource(sourceKey) {
   } catch (requestError) {
     connectedSources[sourceKey] = { ...connectedSources[sourceKey], connected: false, error: requestError.message };
     saveConnectedSources();
+    await loadConnectedSourcesPanel();
   } finally {
     syncingSource = null;
     renderConnectedSources();

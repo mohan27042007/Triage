@@ -230,6 +230,7 @@ form, .result {
 .connected-sources-list { display: grid; gap: 8px; padding: 0 16px 16px; border-top: 1px solid rgb(91 100 112 / 16%); }.connected-sources-list[hidden] { display: none; }
 .source-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px; border: 1px solid rgb(91 100 112 / 24%); border-radius: 7px; background: rgb(18 20 26 / 32%); }
 .source-card.is-connected { border-color: rgb(79 158 122 / 52%); }
+.source-card.has-sync-error { border-color: rgb(201 54 39 / 58%); }
 .source-card.is-coming-soon { opacity: .6; }
 .source-card-copy { min-width: 0; }
 .source-title-row { display: flex; align-items: center; gap: 8px; }
@@ -237,6 +238,7 @@ form, .result {
 .source-card .muted { margin: 3px 0 0; }
 .source-status { margin: 8px 0 0; color: var(--triage-green); font: 12px/1.4 "JetBrains Mono", ui-monospace, monospace; }
 .source-status.setup-required { color: var(--triage-amber); }
+.source-status.sync-error { color: var(--triage-red); }
 .source-setup { margin: 8px 0 0; color: var(--triage-amber); font-size: 12px; line-height: 1.5; }
 .source-setup code { color: var(--paper); }
 .source-toggle { position: relative; flex: 0 0 auto; width: 46px; height: 26px; cursor: pointer; }

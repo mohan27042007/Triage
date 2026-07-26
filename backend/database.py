@@ -12,7 +12,10 @@ DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 USING_POSTGRES = DATABASE_URL.startswith(("postgres://", "postgresql://"))
 DEFAULT_OWNER_ID = "local-demo"
 VALID_ITEM_SOURCES = {"manual", "gmail", "classroom", "whatsapp-demo"}
-SCHEMA_MIGRATION_ID = "2026-07-26-data-safeguards-v1"
+SCHEMA_MIGRATION_IDS = (
+    "2026-07-26-data-safeguards-v1",
+    "2026-07-26-source-health-v1",
+)
 
 
 class _PostgresConnection:
@@ -116,6 +119,19 @@ def initialize_database() -> None:
             )
             """
         )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS source_sync_status (
+                owner_id TEXT NOT NULL,
+                source TEXT NOT NULL,
+                last_attempt_at TEXT NOT NULL,
+                last_success_at TEXT,
+                last_error TEXT,
+                last_imported_count INTEGER,
+                PRIMARY KEY (owner_id, source)
+            )
+            """
+        )
         _add_column_if_missing(connection, "items", "archived_path", "TEXT")
         _add_column_if_missing(connection, "items", "attachments", "TEXT NOT NULL DEFAULT '[]'")
         _add_column_if_missing(connection, "items", "source_id", "TEXT")
@@ -167,6 +183,17 @@ def _initialize_postgres_database() -> None:
                 created_at TEXT NOT NULL, owner_id TEXT NOT NULL
             )
         """)
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS source_sync_status (
+                owner_id TEXT NOT NULL,
+                source TEXT NOT NULL,
+                last_attempt_at TEXT NOT NULL,
+                last_success_at TEXT,
+                last_error TEXT,
+                last_imported_count INTEGER,
+                PRIMARY KEY (owner_id, source)
+            )
+        """)
         connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_items_owner_source_id ON items(owner_id, source_id) WHERE source_id IS NOT NULL")
         _record_schema_migration(connection)
 
@@ -181,9 +208,9 @@ def _record_schema_migration(connection) -> None:
         )
         """
     )
-    connection.execute(
+    connection.executemany(
         "INSERT INTO schema_migrations (id, applied_at) VALUES (?, ?) ON CONFLICT (id) DO NOTHING",
-        (SCHEMA_MIGRATION_ID, datetime.now().astimezone().isoformat()),
+        [(migration_id, datetime.now().astimezone().isoformat()) for migration_id in SCHEMA_MIGRATION_IDS],
     )
 
 
@@ -262,6 +289,66 @@ def has_items_from_source(source: str, owner_id: str = DEFAULT_OWNER_ID) -> bool
             "SELECT 1 FROM items WHERE source = ? AND owner_id = ? LIMIT 1", (source, owner_id)
         ).fetchone()
     return row is not None
+
+
+SOURCE_SYNC_SOURCES = {"gmail", "classroom"}
+
+
+def record_source_sync(
+    source: str,
+    *,
+    succeeded: bool,
+    imported_count: int | None = None,
+    error_message: str | None = None,
+    owner_id: str = DEFAULT_OWNER_ID,
+) -> None:
+    """Store the outcome of one user-requested, read-only source sync."""
+    if source not in SOURCE_SYNC_SOURCES:
+        raise ValueError("Unsupported source sync status.")
+    attempted_at = datetime.now().astimezone().isoformat()
+    successful_at = attempted_at if succeeded else None
+    safe_error = (error_message or "").strip()[:160] or None
+    with _connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO source_sync_status (
+                owner_id, source, last_attempt_at, last_success_at, last_error, last_imported_count
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT (owner_id, source) DO UPDATE SET
+                last_attempt_at = excluded.last_attempt_at,
+                last_success_at = CASE
+                    WHEN excluded.last_success_at IS NOT NULL THEN excluded.last_success_at
+                    ELSE source_sync_status.last_success_at
+                END,
+                last_error = excluded.last_error,
+                last_imported_count = CASE
+                    WHEN excluded.last_imported_count IS NOT NULL THEN excluded.last_imported_count
+                    ELSE source_sync_status.last_imported_count
+                END
+            """,
+            (owner_id, source, attempted_at, successful_at, safe_error, imported_count),
+        )
+
+
+def get_source_sync_status(owner_id: str = DEFAULT_OWNER_ID) -> dict[str, dict[str, Any]]:
+    """Return the last persisted sync outcome for each supported live source."""
+    with _connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT source, last_attempt_at, last_success_at, last_error, last_imported_count
+            FROM source_sync_status WHERE owner_id = ?
+            """,
+            (owner_id,),
+        ).fetchall()
+    return {
+        row["source"]: {
+            "last_attempt_at": row["last_attempt_at"],
+            "last_success_at": row["last_success_at"],
+            "last_error": row["last_error"],
+            "last_imported_count": row["last_imported_count"],
+        }
+        for row in rows
+    }
 
 
 def get_open_obligations(owner_id: str = DEFAULT_OWNER_ID) -> list[dict[str, Any]]:

@@ -17,7 +17,7 @@ Triage is a local-first AI student desk for scattered academic communication. It
 - Approval Drawer with editable copy-only drafts for completion polls and routine forms. Optional profile details stay in the student's browser and are matched only to explicit, allow-listed form fields; Triage never invents a value or submits anything externally.
 - Study Plan that ranks topics from a question bank and unit notes, with topic outlines rather than generated answers.
 - Assignment Scaffolding that returns requirements, concepts, an approach, and test cases—not a submittable solution.
-- Local, read-only Gmail and Google Classroom sync after Google OAuth setup.
+- Read-only Gmail and Google Classroom sync with persisted last-sync outcomes, clear setup/failure states, and explicit retry controls after Google OAuth setup.
 - Clearly labelled representative WhatsApp demo data; there is no live WhatsApp integration.
 - Authenticated archiving and download of uploaded `.txt`, `.pdf`, and `.docx` files plus newly synced Gmail attachments and accessible Classroom Drive files (up to 20 MB each). Local development uses disk; hosted deployments can use private S3-compatible storage.
 - Shared demo-password gate, in-memory sessions, in-app deadline reminders with per-item snooze and optional browser notifications, keyboard/pulse-rail navigation, a `Ctrl/Cmd + K` command palette, theme controls, and reduced-motion support.
@@ -125,6 +125,7 @@ All application endpoints require a bearer session token. Local demo mode issues
 | `POST /pending/{id}/reject` | Rejects a pending action without changing the item. |
 | `POST /sources/gmail/sync` | Imports newly seen Gmail inbox messages after local OAuth. |
 | `POST /sources/classroom/sync` | Imports Classroom announcements and coursework after local OAuth. |
+| `GET /sources/status` | Reports the stored connection readiness and latest user-requested Gmail/Classroom sync outcomes; it never starts a sync itself. |
 | `POST /sources/whatsapp/demo-load` | Loads representative, simulated WhatsApp messages once. |
 | `POST /study/upload` | Builds and stores a ranked study plan from two `.txt`, selectable-text `.pdf`, or `.docx` files. |
 | `GET /study/plan` | Retrieves the latest stored study plan. |
