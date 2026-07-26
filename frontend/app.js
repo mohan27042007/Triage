@@ -27,6 +27,7 @@ const approvalTrigger = document.querySelector("#approval-trigger");
 const pendingCount = document.querySelector("#pending-count");
 const approvalLayer = document.querySelector("#approval-layer");
 const approvalDrawer = document.querySelector("#approval-drawer");
+const approvalClose = document.querySelector("#approval-close");
 const detailLayer = document.querySelector("#detail-layer");
 const detailDialog = document.querySelector("#detail-dialog");
 const detailContent = document.querySelector("#detail-content");
@@ -70,6 +71,7 @@ let activePanelIndex = 0;
 let requestedPanelIndex = null;
 let panelSettleTimer = null;
 let detailReturnFocus = null;
+let settingsReturnFocus = null;
 let queueItemsById = new Map();
 let streamItemsById = new Map();
 let historyItemsById = new Map();
@@ -170,6 +172,8 @@ function closeSettingsDrawer() {
   settingsMenu.setAttribute("aria-hidden", "true");
   settingsFab.setAttribute("aria-expanded", "false");
   settingsMenu.classList.remove("is-open");
+  if (settingsReturnFocus?.isConnected) settingsReturnFocus.focus();
+  settingsReturnFocus = null;
 }
 
 function commandCandidates() {
@@ -226,7 +230,8 @@ function runCommand(index) {
   command[2]();
 }
 
-function openSettingsView(viewName) {
+function openSettingsView(viewName, trigger = document.activeElement) {
+  settingsReturnFocus = trigger instanceof HTMLElement ? trigger : settingsFab;
   document.querySelectorAll("[data-settings-panel]").forEach((panel) => {
     panel.hidden = panel.dataset.settingsPanel !== viewName;
   });
@@ -235,6 +240,7 @@ function openSettingsView(viewName) {
   settingsMenu.setAttribute("aria-hidden", "true");
   settingsMenu.classList.remove("is-open");
   settingsFab.setAttribute("aria-expanded", "false");
+  closeSettingsButton.focus();
 }
 
 function applyTheme(theme) {
@@ -361,6 +367,7 @@ approvalTrigger.addEventListener("click", () => {
     openApprovalDrawer();
   }
 });
+approvalClose.addEventListener("click", closeApprovalDrawer);
 approvalLayer.querySelector(".approval-scrim").addEventListener("click", closeApprovalDrawer);
 
 document.addEventListener("keydown", (event) => {
@@ -376,6 +383,28 @@ document.addEventListener("keydown", (event) => {
     "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])",
   );
   const elements = [...focusable];
+  const first = elements[0];
+  const last = elements.at(-1);
+  if (!first || !last) return;
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Tab" || approvalLayer.classList.contains("is-open")) return;
+  const activeDialog = commandLayer.classList.contains("is-open") ? commandPalette
+    : detailLayer.classList.contains("is-open") ? detailDialog
+      : settingsDrawer.classList.contains("is-open") ? settingsDrawer
+        : null;
+  if (!activeDialog) return;
+  const elements = [...activeDialog.querySelectorAll(
+    "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])",
+  )].filter((element) => element.offsetParent !== null);
   const first = elements[0];
   const last = elements.at(-1);
   if (!first || !last) return;
@@ -448,11 +477,8 @@ settingsFab.addEventListener("click", () => {
   settingsMenu.setAttribute("aria-hidden", String(!open));
   settingsFab.setAttribute("aria-expanded", String(open));
 });
-document.querySelectorAll("[data-settings-view]").forEach((button) => button.addEventListener("click", () => openSettingsView(button.dataset.settingsView)));
-closeSettingsButton.addEventListener("click", () => {
-  settingsDrawer.setAttribute("aria-hidden", "true");
-  settingsDrawer.classList.remove("is-open");
-});
+document.querySelectorAll("[data-settings-view]").forEach((button) => button.addEventListener("click", () => openSettingsView(button.dataset.settingsView, button)));
+closeSettingsButton.addEventListener("click", closeSettingsDrawer);
 commandQuery.addEventListener("input", () => {
   commandActiveIndex = 0;
   renderCommandResults();

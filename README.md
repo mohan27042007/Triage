@@ -244,6 +244,7 @@ Editing or approving this draft does not send it anywhere.
 - Press `Ctrl+K` (Windows/Linux) or `Cmd+K` (macOS) after signing in to open the local command palette. Search panel names, common local actions, or recently loaded items; use arrow keys and Enter to select.
 - Arrow keys move between dashboard panels when focus is not inside a form control. Escape closes the command palette, detail dialog, approval drawer, or settings drawer.
 - The app supports system/light/dark themes and a persistent reduced-motion preference.
+- Dialogs keep keyboard focus inside while open, restore it to the trigger when closed, and expose an explicit close control. Touch layouts use larger interactive targets and dynamic viewport sizing.
 
 ## Data safety
 
