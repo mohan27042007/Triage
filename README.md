@@ -172,6 +172,10 @@ CORS_ORIGINS=https://YOUR-VERCEL-DOMAIN
 
 The browser receives the API session token only in the OAuth redirect fragment, then immediately removes it from the URL. Triage uses read-only Google scopes and does not send messages, complete external forms, or submit anything. Local desktop OAuth remains supported when hosted mode is disabled.
 
+### Production hardening
+
+The API returns `no-store`, clickjacking, content-type, referrer, and unused-permission protections on every response. Sensitive endpoints have conservative process-local rate limits; on Railway set `TRUST_PROXY_HEADERS=true` so limits distinguish visitors behind Railway's proxy. The current browser's **Sign out** button now invalidates its hosted session in Postgres (or removes its local demo session). For multiple replicas or public scale, add a shared edge/WAF rate limit and managed monitoring rather than relying only on the in-process limiter.
+
 ### Durable hosted attachment storage
 
 By default, local development retains files in `backend/archive/`. For a hosted deployment, configure a private S3-compatible bucket (for example Cloudflare R2) in Railway:

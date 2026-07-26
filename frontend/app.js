@@ -482,7 +482,14 @@ reducedMotionSetting.addEventListener("change", () => {
   document.documentElement.dataset.reducedMotion = String(reducedMotionSetting.checked);
   localStorage.setItem("triage-reduced-motion", String(reducedMotionSetting.checked));
 });
-document.querySelector("#settings-sign-out").addEventListener("click", showLandingScreen);
+document.querySelector("#settings-sign-out").addEventListener("click", async () => {
+  try {
+    await apiFetch(apiUrl("/auth/logout"), { method: "POST" });
+  } catch {
+    // Removing the local session still protects this browser if it is offline.
+  }
+  showLandingScreen();
+});
 profileForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   profileStatus.textContent = "";

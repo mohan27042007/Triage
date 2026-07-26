@@ -241,6 +241,14 @@ def session_user(token: str) -> str | None:
     return str(row["user_id"]) if row else None
 
 
+def revoke_session(token: str) -> None:
+    """Invalidate just the current hosted API session without revoking Google access."""
+    if not HOSTED_AUTH_ENABLED or not token:
+        return
+    with _connection() as connection:
+        connection.execute("DELETE FROM api_sessions WHERE token_hash = %s", (_hash(token),))
+
+
 def has_google_connection(owner_id: str) -> bool:
     if not HOSTED_AUTH_ENABLED:
         return False

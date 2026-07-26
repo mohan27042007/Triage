@@ -42,9 +42,11 @@ from hosted_auth import (
     is_enabled as hosted_auth_enabled,
     push_public_configuration,
     remove_push_subscription,
+    revoke_session,
     save_push_subscription,
     session_user,
 )
+from rate_limit import RateLimiter
 from reminder_schedule import parse_deadline
 from whatsapp_demo_data import WHATSAPP_DEMO_MESSAGES, WHATSAPP_DEMO_SOURCE
 from database import (
@@ -81,6 +83,9 @@ CORS_ORIGINS = [
     if origin.strip()
 ]
 REMINDER_DISPATCH_SECRET = os.getenv("REMINDER_DISPATCH_SECRET", "").strip()
+TRUST_PROXY_HEADERS = os.getenv("TRUST_PROXY_HEADERS", "").lower() == "true"
+RATE_LIMIT_ENABLED = os.getenv("RATE_LIMIT_ENABLED", "true").lower() != "false"
+RATE_LIMITER = RateLimiter()
 
 initialize_database()
 initialize_hosted_auth()
@@ -93,7 +98,12 @@ async def require_demo_auth(request: Request, call_next):
         "/health", "/auth/login", "/auth/config", "/auth/google/start", "/auth/google/callback",
         "/internal/reminders/dispatch",
     }
-    if request.method == "OPTIONS" or request.url.path in public_paths:
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
+    if request.url.path in public_paths:
+        if not _allow_request(request, _public_rate_limit(request.url.path)):
+            return _too_many_requests()
         return await call_next(request)
 
     authorization = request.headers.get("authorization", "")
@@ -105,11 +115,29 @@ async def require_demo_auth(request: Request, call_next):
         if not owner_id:
             return JSONResponse(status_code=401, content={"detail": "Authentication required."})
         request.state.owner_id = owner_id
+        request.state.session_token = token
+        if not _allow_request(request, _authenticated_rate_limit(request.url.path), owner_id):
+            return _too_many_requests()
         return await call_next(request)
     if token not in VALID_SESSION_TOKENS:
         return JSONResponse(status_code=401, content={"detail": "Authentication required."})
     request.state.owner_id = DEFAULT_OWNER_ID
+    request.state.session_token = token
+    if not _allow_request(request, _authenticated_rate_limit(request.url.path), DEFAULT_OWNER_ID):
+        return _too_many_requests()
     return await call_next(request)
+
+
+@app.middleware("http")
+async def add_hardening_headers(request: Request, call_next):
+    """Avoid caching private API output and set baseline browser protections."""
+    response = await call_next(request)
+    response.headers.setdefault("Cache-Control", "no-store")
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    return response
 
 
 app.add_middleware(
@@ -124,6 +152,49 @@ app.add_middleware(
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+def _client_key(request: Request) -> str:
+    if TRUST_PROXY_HEADERS:
+        forwarded = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+        if forwarded:
+            return forwarded
+    return request.client.host if request.client else "unknown"
+
+
+def _public_rate_limit(path: str) -> tuple[int, int] | None:
+    if path == "/auth/login":
+        return (10, 15 * 60)
+    if path == "/auth/google/start":
+        return (20, 15 * 60)
+    if path == "/internal/reminders/dispatch":
+        return (5, 60)
+    return None
+
+
+def _authenticated_rate_limit(path: str) -> tuple[int, int] | None:
+    if path in {"/ingest", "/study/upload", "/assignment/help"}:
+        return (20, 10 * 60)
+    if path in {"/sources/gmail/sync", "/sources/classroom/sync", "/sources/whatsapp/demo-load"}:
+        return (10, 10 * 60)
+    if path in {"/push/subscribe", "/auth/logout"}:
+        return (10, 10 * 60)
+    return None
+
+
+def _allow_request(request: Request, limit: tuple[int, int] | None, owner_id: str | None = None) -> bool:
+    if not RATE_LIMIT_ENABLED or limit is None:
+        return True
+    scope = owner_id or _client_key(request)
+    return RATE_LIMITER.allow(f"{request.url.path}:{scope}", *limit)
+
+
+def _too_many_requests() -> JSONResponse:
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Too many requests. Please wait a moment and try again."},
+        headers={"Retry-After": "60"},
+    )
 
 
 @app.post("/auth/login")
@@ -148,6 +219,17 @@ async def login(request: Request) -> dict[str, str]:
     token = secrets.token_hex(32)
     VALID_SESSION_TOKENS.add(token)
     return {"token": token}
+
+
+@app.post("/auth/logout")
+def logout(request: Request) -> Response:
+    """End the current app session; local Google tokens stay untouched."""
+    token = getattr(request.state, "session_token", "")
+    if hosted_auth_enabled():
+        revoke_session(token)
+    else:
+        VALID_SESSION_TOKENS.discard(token)
+    return Response(status_code=204)
 
 
 @app.get("/auth/config")
