@@ -179,9 +179,16 @@ def initialize_database() -> None:
         _add_column_if_missing(connection, "assignment_help", "workspace_id", "INTEGER")
         _add_column_if_missing(connection, "source_sync_status", "workspace_id", "INTEGER")
         connection.execute("DROP INDEX IF EXISTS idx_items_source_id")
+        connection.execute("DROP INDEX IF EXISTS idx_items_owner_source_id")
         connection.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS idx_items_owner_source_id "
-            "ON items(owner_id, source_id) WHERE source_id IS NOT NULL"
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_items_workspace_source_id "
+            "ON items(workspace_id, source, source_id) "
+            "WHERE workspace_id IS NOT NULL AND source_id IS NOT NULL"
+        )
+        connection.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_items_local_owner_source_id "
+            "ON items(owner_id, source, source_id) "
+            "WHERE workspace_id IS NULL AND source_id IS NOT NULL"
         )
         _record_schema_migration(connection)
 
@@ -230,6 +237,12 @@ def create_item(
     """Persist one classified item and return the stored record."""
     if source not in VALID_ITEM_SOURCES:
         raise ValueError(f"Unsupported item source: {source}")
+    if source_id is not None:
+        existing = get_item_by_source_id(
+            source, source_id, owner_id=owner_id, workspace_id=workspace_id
+        )
+        if existing is not None:
+            return existing
     created_at = datetime.now().astimezone().isoformat()
     with _connection() as connection:
         insert_query = """
@@ -239,8 +252,9 @@ def create_item(
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?)
         """
+        insert_with_conflict_handling = f"{insert_query} ON CONFLICT DO NOTHING"
         cursor = connection.execute(
-            f"{insert_query} RETURNING id" if USING_POSTGRES else insert_query,
+            f"{insert_with_conflict_handling} RETURNING id" if USING_POSTGRES else insert_with_conflict_handling,
             (
                 text.strip(),
                 classification["category"],
@@ -257,7 +271,13 @@ def create_item(
                 workspace_id,
             ),
         )
-        item_id = cursor.fetchone()["id"] if USING_POSTGRES else cursor.lastrowid
+        if USING_POSTGRES:
+            row = cursor.fetchone()
+            item_id = row["id"] if row else None
+        else:
+            item_id = cursor.lastrowid if cursor.rowcount == 1 else None
+    if item_id is None and source_id is not None:
+        return get_item_by_source_id(source, source_id, owner_id=owner_id, workspace_id=workspace_id)
     return get_item(item_id, owner_id) if item_id else None
 
 
@@ -267,12 +287,27 @@ def get_item(item_id: int, owner_id: str = DEFAULT_OWNER_ID) -> dict[str, Any] |
     return _row_to_item(row) if row else None
 
 
-def get_item_by_source_id(source_id: str, owner_id: str = DEFAULT_OWNER_ID) -> dict[str, Any] | None:
-    """Return one previously imported source item, if it exists."""
+def get_item_by_source_id(
+    source: str,
+    source_id: str,
+    *,
+    owner_id: str = DEFAULT_OWNER_ID,
+    workspace_id: int | None = None,
+) -> dict[str, Any] | None:
+    """Return one item using the workspace/provider/source-item identity key."""
+    if source not in VALID_ITEM_SOURCES:
+        raise ValueError(f"Unsupported item source: {source}")
     with _connection() as connection:
-        row = connection.execute(
-            "SELECT * FROM items WHERE source_id = ? AND owner_id = ?", (source_id, owner_id)
-        ).fetchone()
+        if workspace_id is None:
+            row = connection.execute(
+                "SELECT * FROM items WHERE source = ? AND source_id = ? AND owner_id = ? AND workspace_id IS NULL",
+                (source, source_id, owner_id),
+            ).fetchone()
+        else:
+            row = connection.execute(
+                "SELECT * FROM items WHERE source = ? AND source_id = ? AND workspace_id = ?",
+                (source, source_id, workspace_id),
+            ).fetchone()
     return _row_to_item(row) if row else None
 
 

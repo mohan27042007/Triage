@@ -466,7 +466,9 @@ def sync_gmail(request: Request) -> dict[str, int]:
         processed = 0
         skipped = 0
         for message in messages:
-            if get_item_by_source_id(message["id"], request.state.owner_id):
+            if get_item_by_source_id(
+                "gmail", message["id"], owner_id=request.state.owner_id, workspace_id=request.state.workspace_id
+            ):
                 skipped += 1
                 continue
             create_item(
@@ -500,7 +502,9 @@ def sync_classroom(request: Request) -> dict[str, int]:
         processed = 0
         skipped = 0
         for item in items:
-            if get_item_by_source_id(item["id"], request.state.owner_id):
+            if get_item_by_source_id(
+                "classroom", item["id"], owner_id=request.state.owner_id, workspace_id=request.state.workspace_id
+            ):
                 skipped += 1
                 continue
             create_item(

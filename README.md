@@ -59,6 +59,12 @@ Gmail and Classroom now have server-persisted, pause/resume-able connection reco
 with workspace scope and sync health. See `docs/V2_SOURCE_CONNECTIONS.md`; this does
 not enable background syncing yet.
 
+## V2 source deduplication
+
+Imported items now deduplicate by workspace, provider, and provider item ID, so equal
+IDs from Gmail and Classroom do not collide. See `docs/V2_SOURCE_DEDUPLICATION.md`
+for the data-preserving migration and staging checks.
+
 ## Stack
 
 | Layer | Current implementation |

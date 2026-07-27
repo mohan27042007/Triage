@@ -14,9 +14,9 @@ resets, or overwrites a database.
 - Applied migration IDs are stored in `postgres_schema_migrations` only after their
   migration function succeeds. A failed migration is not marked complete and the
   surrounding database transaction rolls back.
-- Existing hosted schemas upgrade safely because every current migration uses
-  additive `CREATE ... IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, and idempotent
-  backfill statements.
+- Existing hosted schemas upgrade safely through additive table/column changes and
+  idempotent backfills. The source-dedupe migration replaces obsolete indexes only;
+  it never deletes or rewrites item data.
 
 ## Deployment procedure
 
@@ -50,7 +50,9 @@ SELECT id, applied_at FROM postgres_schema_migrations ORDER BY applied_at, id;
 
 | ID | Scope |
 | --- | --- |
-| `2026-07-26-core-schema-v1` | Core Triage records and the current source-dedupe index. |
+| `2026-07-26-core-schema-v1` | Core Triage records. |
 | `2026-07-27-core-workspace-columns-v1` | Nullable workspace compatibility columns for existing hosted records. |
 | `2026-07-26-hosted-auth-schema-v1` | Hosted users, OAuth credentials, sessions, push subscriptions, and reminder deliveries. |
 | `2026-07-27-personal-workspaces-v1` | Personal workspaces, memberships, and idempotent workspace backfill. |
+| `2026-07-27-source-connections-v1` | Workspace-scoped Gmail/Classroom connection configuration and health. |
+| `2026-07-27-workspace-source-dedupe-v1` | Replaces obsolete item indexes with provider-aware workspace deduplication. |

@@ -6,6 +6,7 @@ from postgres_migrations import (
     CORE_POSTGRES_MIGRATIONS,
     HOSTED_POSTGRES_MIGRATIONS,
     PostgresMigration,
+    _correct_item_dedupe,
     apply_postgres_migrations,
 )
 
@@ -17,16 +18,22 @@ class _Result:
     def fetchall(self):
         return self.rows
 
+    def fetchone(self):
+        return self.rows[0] if self.rows else None
+
 
 class _Connection:
-    def __init__(self, applied=()) -> None:
+    def __init__(self, applied=(), dedupe_collision=None) -> None:
         self.applied = set(applied)
+        self.dedupe_collision = dedupe_collision
         self.queries: list[tuple[str, object]] = []
 
     def execute(self, query: str, parameters=()):
         self.queries.append((query, parameters))
         if query == "SELECT id FROM postgres_schema_migrations":
             return _Result([{"id": identifier} for identifier in self.applied])
+        if "GROUP BY workspace_id, source, source_id" in query:
+            return _Result([self.dedupe_collision] if self.dedupe_collision else ())
         if query.startswith("INSERT INTO postgres_schema_migrations"):
             self.applied.add(parameters[0])
         return _Result()
@@ -64,6 +71,14 @@ class PostgresMigrationTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "expected failure"):
             apply_postgres_migrations(connection, (PostgresMigration("001-fails", fail),))
         self.assertNotIn("001-fails", connection.applied)
+
+    def test_dedupe_migration_stops_before_index_changes_on_legacy_collision(self) -> None:
+        connection = _Connection(dedupe_collision={"workspace_id": 1, "source": "gmail", "source_id": "x"})
+
+        with self.assertRaisesRegex(RuntimeError, "duplicate workspace/provider/source IDs"):
+            _correct_item_dedupe(connection)
+
+        self.assertFalse(any("DROP INDEX" in query for query, _ in connection.queries))
 
 
 if __name__ == "__main__":

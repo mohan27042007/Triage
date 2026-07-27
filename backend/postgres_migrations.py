@@ -85,8 +85,14 @@ def _create_core_schema(connection) -> None:
         )
     """)
     connection.execute(
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_items_owner_source_id "
-        "ON items(owner_id, source_id) WHERE source_id IS NOT NULL"
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_items_workspace_source_id "
+        "ON items(workspace_id, source, source_id) "
+        "WHERE workspace_id IS NOT NULL AND source_id IS NOT NULL"
+    )
+    connection.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_items_local_owner_source_id "
+        "ON items(owner_id, source, source_id) "
+        "WHERE workspace_id IS NULL AND source_id IS NOT NULL"
     )
 
 
@@ -126,6 +132,7 @@ def _create_source_connections(connection) -> None:
             UNIQUE (workspace_id, source)
         )
     """)
+
     connection.execute("""
         INSERT INTO source_connections (
             owner_id, workspace_id, source, credential_ref, state, last_attempt_at,
@@ -176,6 +183,34 @@ def _create_source_connections(connection) -> None:
     """)
 
 
+def _correct_item_dedupe(connection) -> None:
+    """Replace owner-only source IDs with provider-aware workspace identities."""
+    collision = connection.execute("""
+        SELECT workspace_id, source, source_id
+        FROM items
+        WHERE workspace_id IS NOT NULL AND source_id IS NOT NULL
+        GROUP BY workspace_id, source, source_id
+        HAVING COUNT(*) > 1
+        LIMIT 1
+    """).fetchone()
+    if collision is not None:
+        raise RuntimeError(
+            "Cannot apply workspace-source dedupe until duplicate workspace/provider/source IDs are resolved."
+        )
+    connection.execute("DROP INDEX IF EXISTS idx_items_owner_source_id")
+    connection.execute("DROP INDEX IF EXISTS idx_items_source_id")
+    connection.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_items_workspace_source_id "
+        "ON items(workspace_id, source, source_id) "
+        "WHERE workspace_id IS NOT NULL AND source_id IS NOT NULL"
+    )
+    connection.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_items_local_owner_source_id "
+        "ON items(owner_id, source, source_id) "
+        "WHERE workspace_id IS NULL AND source_id IS NOT NULL"
+    )
+
+
 CORE_POSTGRES_MIGRATIONS = (
     PostgresMigration("2026-07-26-core-schema-v1", _create_core_schema),
     PostgresMigration("2026-07-27-core-workspace-columns-v1", _ensure_core_workspace_columns),
@@ -185,4 +220,5 @@ HOSTED_POSTGRES_MIGRATIONS = (
     PostgresMigration("2026-07-26-hosted-auth-schema-v1", _create_hosted_auth_schema),
     PostgresMigration("2026-07-27-personal-workspaces-v1", initialize_workspace_foundation),
     PostgresMigration("2026-07-27-source-connections-v1", _create_source_connections),
+    PostgresMigration("2026-07-27-workspace-source-dedupe-v1", _correct_item_dedupe),
 )
