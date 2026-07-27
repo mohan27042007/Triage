@@ -29,8 +29,9 @@ except ImportError:
     webpush = None
 
 from google_client import GOOGLE_SCOPES
+from postgres_migrations import HOSTED_POSTGRES_MIGRATIONS, apply_postgres_migrations
 from reminder_schedule import parse_deadline, reminder_window
-from workspace_foundation import ensure_personal_workspace, initialize_workspace_foundation
+from workspace_foundation import ensure_personal_workspace
 
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "").rstrip("/")
@@ -114,48 +115,7 @@ def initialize() -> None:
     if error:
         raise RuntimeError(error)
     with _connection() as connection:
-        connection.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id BIGSERIAL PRIMARY KEY, google_subject TEXT NOT NULL UNIQUE,
-                email TEXT NOT NULL, display_name TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            )
-        """)
-        initialize_workspace_foundation(connection)
-        connection.execute("""
-            CREATE TABLE IF NOT EXISTS google_connections (
-                user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-                encrypted_credentials BYTEA NOT NULL, scopes TEXT NOT NULL,
-                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            )
-        """)
-        connection.execute("""
-            CREATE TABLE IF NOT EXISTS api_sessions (
-                token_hash TEXT PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                expires_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            )
-        """)
-        connection.execute("""
-            CREATE TABLE IF NOT EXISTS oauth_states (
-                state_hash TEXT PRIMARY KEY, code_verifier TEXT NOT NULL, return_to TEXT NOT NULL,
-                expires_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            )
-        """)
-        connection.execute("""
-            CREATE TABLE IF NOT EXISTS push_subscriptions (
-                id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                endpoint_hash TEXT NOT NULL UNIQUE, encrypted_subscription BYTEA NOT NULL,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            )
-        """)
-        connection.execute("""
-            CREATE TABLE IF NOT EXISTS reminder_deliveries (
-                user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                reminder_window TEXT NOT NULL, reminder_date DATE NOT NULL,
-                delivered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                PRIMARY KEY (user_id, reminder_window, reminder_date)
-            )
-        """)
+        apply_postgres_migrations(connection, HOSTED_POSTGRES_MIGRATIONS)
 
 
 def authorization_url(return_to: str | None) -> str:

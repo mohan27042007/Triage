@@ -25,8 +25,9 @@ memberships.
 The workspace foundation is additive only: it uses `CREATE TABLE IF NOT EXISTS`,
 `ADD COLUMN IF NOT EXISTS`, `INSERT ... ON CONFLICT DO NOTHING`, and `UPDATE` only
 where `workspace_id` is null. It does not delete, recreate, reset, or overwrite a
-database. No foreign key is attached to the new compatibility columns yet because
-the upcoming migration-framework task will consolidate versioned hosted migrations.
+database. No foreign key is attached to the new compatibility columns yet; the
+versioned PostgreSQL migration framework now records this transition, while stricter
+workspace-based reads and constraints remain later v2 work.
 
 ## Hosted deployment verification
 

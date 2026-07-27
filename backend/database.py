@@ -7,6 +7,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from postgres_migrations import CORE_POSTGRES_MIGRATIONS, apply_postgres_migrations
+
 DATABASE_PATH = Path(__file__).with_name("triage.db")
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 USING_POSTGRES = DATABASE_URL.startswith(("postgres://", "postgresql://"))
@@ -162,52 +164,9 @@ def initialize_database() -> None:
 
 
 def _initialize_postgres_database() -> None:
-    """Create the hosted schema without modifying any local SQLite data."""
+    """Apply ordered core-schema migrations without modifying local SQLite data."""
     with _connection() as connection:
-        connection.execute("""
-            CREATE TABLE IF NOT EXISTS items (
-                id BIGSERIAL PRIMARY KEY, text TEXT NOT NULL, category TEXT NOT NULL,
-                reason TEXT NOT NULL, deadline TEXT, mandatory BOOLEAN, source TEXT NOT NULL,
-                created_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', archived_path TEXT,
-                attachments TEXT NOT NULL DEFAULT '[]', source_id TEXT, is_poll_or_form BOOLEAN NOT NULL DEFAULT FALSE,
-                owner_id TEXT NOT NULL, workspace_id BIGINT
-            )
-        """)
-        connection.execute("""
-            CREATE TABLE IF NOT EXISTS study_plans (
-                id BIGSERIAL PRIMARY KEY, topic TEXT NOT NULL, weight INTEGER NOT NULL,
-                subtopics TEXT NOT NULL, created_at TEXT NOT NULL, question_bank_archived_path TEXT,
-                unit_notes_archived_path TEXT, owner_id TEXT NOT NULL, workspace_id BIGINT
-            )
-        """)
-        connection.execute("""
-            CREATE TABLE IF NOT EXISTS pending_actions (
-                id BIGSERIAL PRIMARY KEY, item_id BIGINT NOT NULL REFERENCES items(id),
-                action_type TEXT NOT NULL, payload TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
-                created_at TEXT NOT NULL, owner_id TEXT NOT NULL, workspace_id BIGINT
-            )
-        """)
-        connection.execute("""
-            CREATE TABLE IF NOT EXISTS assignment_help (
-                id BIGSERIAL PRIMARY KEY, prompt TEXT NOT NULL, requirements TEXT NOT NULL,
-                concepts TEXT NOT NULL, approach TEXT NOT NULL, test_cases TEXT NOT NULL,
-                created_at TEXT NOT NULL, owner_id TEXT NOT NULL, workspace_id BIGINT
-            )
-        """)
-        connection.execute("""
-            CREATE TABLE IF NOT EXISTS source_sync_status (
-                owner_id TEXT NOT NULL,
-                source TEXT NOT NULL,
-                last_attempt_at TEXT NOT NULL,
-                last_success_at TEXT,
-                last_error TEXT,
-                last_imported_count INTEGER,
-                workspace_id BIGINT,
-                PRIMARY KEY (owner_id, source)
-            )
-        """)
-        connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_items_owner_source_id ON items(owner_id, source_id) WHERE source_id IS NOT NULL")
-        _record_schema_migration(connection)
+        apply_postgres_migrations(connection, CORE_POSTGRES_MIGRATIONS)
 
 
 def _record_schema_migration(connection) -> None:

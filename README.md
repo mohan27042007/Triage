@@ -47,6 +47,12 @@ Current owner-scoped behavior remains compatible while `workspace_id` is written
 new hosted records. See `docs/V2_WORKSPACE_FOUNDATION.md` for the additive migration
 behavior and staging verification steps.
 
+## V2 PostgreSQL migrations
+
+Hosted PostgreSQL schema changes now use ordered, recorded, advisory-lock-protected
+migrations. See `docs/V2_POSTGRES_MIGRATIONS.md` for the staging-first deployment,
+verification, and forward-only rollback procedure.
+
 ## Stack
 
 | Layer | Current implementation |
