@@ -1450,6 +1450,7 @@ function openQueueDetail(item, trigger) {
     <p class="eyebrow">ACTION QUEUE</p>
     <h2 id="detail-title">${escapeHtml(item.text)}</h2>
     <p class="detail-reason">${escapeHtml(item.reason)}</p>
+    ${reviewNotice(item)}
     <div class="detail-facts"><div><span>Deadline</span><strong class="deadline${deadlineClass}">${escapeHtml(deadline)}</strong></div><div><span>Requirement</span><strong>${mandatory}</strong></div></div>
     <div class="detail-actions">${looksLikeRoutineFormRequest(item.text) ? `<button class="draft-form-button secondary" type="button" data-item-id="${item.id}">Draft form response</button>` : ""}<button class="done-button" type="button" data-item-id="${item.id}">Mark done for review</button>${itemArchiveLinks(item)}</div>
   `, trigger);
@@ -1464,9 +1465,21 @@ function openStreamDetail(item, trigger, origin = "UNIFIED STREAM") {
     <p class="eyebrow">${escapeHtml(sourceLabel(item.source))} / ${escapeHtml(origin)}</p>
     <h2 id="detail-title">${escapeHtml(item.text)}</h2>
     <p class="detail-reason">${escapeHtml(item.reason)}</p>
+    ${reviewNotice(item)}
     <div class="detail-facts"><div><span>Classification</span><strong>${escapeHtml(item.category)}</strong></div><div><span>Received</span><strong>${escapeHtml(streamTimestamp(item.created_at))}</strong></div><div><span>Deadline</span><strong>${escapeHtml(deadline)}</strong></div><div><span>Status</span><strong>${escapeHtml(item.status)}</strong></div></div>
     <div class="detail-actions">${destination}${itemArchiveLinks(item)}</div>
   `, trigger);
+}
+
+function reviewNotice(item) {
+  if (!item.review_required) return "";
+  const labels = {
+    obligation_missing_deadline: "no explicit deadline",
+    conflicting_requirement_language: "conflicting requirement language",
+    external_action_requires_human_review: "an external action request",
+  };
+  const reasons = (item.review_reasons || []).map((reason) => labels[reason] || reason).join(", ");
+  return `<p class="detail-reason"><strong>Human review required:</strong> ${escapeHtml(reasons)}</p>`;
 }
 
 function openStudyDetail(item, trigger) {

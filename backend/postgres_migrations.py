@@ -48,6 +48,8 @@ def _create_core_schema(connection) -> None:
             reason TEXT NOT NULL, deadline TEXT, mandatory BOOLEAN, source TEXT NOT NULL,
             created_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', archived_path TEXT,
             attachments TEXT NOT NULL DEFAULT '[]', source_id TEXT, is_poll_or_form BOOLEAN NOT NULL DEFAULT FALSE,
+            review_required BOOLEAN NOT NULL DEFAULT FALSE, review_reasons TEXT NOT NULL DEFAULT '[]',
+            draft_eligible BOOLEAN NOT NULL DEFAULT FALSE,
             owner_id TEXT NOT NULL, workspace_id BIGINT
         )
     """)
@@ -99,6 +101,13 @@ def _create_core_schema(connection) -> None:
 def _ensure_core_workspace_columns(connection) -> None:
     for table in ("items", "study_plans", "pending_actions", "assignment_help", "source_sync_status"):
         connection.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS workspace_id BIGINT")
+
+
+def _add_policy_routing_columns(connection) -> None:
+    """Add deterministic review fields without changing existing item data."""
+    connection.execute("ALTER TABLE items ADD COLUMN IF NOT EXISTS review_required BOOLEAN NOT NULL DEFAULT FALSE")
+    connection.execute("ALTER TABLE items ADD COLUMN IF NOT EXISTS review_reasons TEXT NOT NULL DEFAULT '[]'")
+    connection.execute("ALTER TABLE items ADD COLUMN IF NOT EXISTS draft_eligible BOOLEAN NOT NULL DEFAULT FALSE")
 
 
 def _create_hosted_auth_schema(connection) -> None:
@@ -244,6 +253,7 @@ def _create_sync_jobs(connection) -> None:
 CORE_POSTGRES_MIGRATIONS = (
     PostgresMigration("2026-07-26-core-schema-v1", _create_core_schema),
     PostgresMigration("2026-07-27-core-workspace-columns-v1", _ensure_core_workspace_columns),
+    PostgresMigration("2026-07-27-policy-routing-v1", _add_policy_routing_columns),
 )
 
 HOSTED_POSTGRES_MIGRATIONS = (

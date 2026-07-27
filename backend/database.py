@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from postgres_migrations import CORE_POSTGRES_MIGRATIONS, apply_postgres_migrations
+from policy_routing import route_policy
 
 DATABASE_PATH = Path(__file__).with_name("triage.db")
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
@@ -78,6 +79,9 @@ def initialize_database() -> None:
                 attachments TEXT NOT NULL DEFAULT '[]',
                 source_id TEXT,
                 is_poll_or_form INTEGER NOT NULL DEFAULT 0,
+                review_required INTEGER NOT NULL DEFAULT 0,
+                review_reasons TEXT NOT NULL DEFAULT '[]',
+                draft_eligible INTEGER NOT NULL DEFAULT 0,
                 owner_id TEXT NOT NULL DEFAULT 'local-demo',
                 workspace_id INTEGER
             )
@@ -195,6 +199,9 @@ def initialize_database() -> None:
         _add_column_if_missing(connection, "items", "attachments", "TEXT NOT NULL DEFAULT '[]'")
         _add_column_if_missing(connection, "items", "source_id", "TEXT")
         _add_column_if_missing(connection, "items", "is_poll_or_form", "INTEGER NOT NULL DEFAULT 0")
+        _add_column_if_missing(connection, "items", "review_required", "INTEGER NOT NULL DEFAULT 0")
+        _add_column_if_missing(connection, "items", "review_reasons", "TEXT NOT NULL DEFAULT '[]'")
+        _add_column_if_missing(connection, "items", "draft_eligible", "INTEGER NOT NULL DEFAULT 0")
         _add_column_if_missing(connection, "items", "owner_id", "TEXT NOT NULL DEFAULT 'local-demo'")
         _add_column_if_missing(connection, "items", "workspace_id", "INTEGER")
         _add_column_if_missing(connection, "study_plans", "question_bank_archived_path", "TEXT")
@@ -271,14 +278,16 @@ def create_item(
         )
         if existing is not None:
             return existing
+    policy = route_policy(text, classification)
     created_at = datetime.now().astimezone().isoformat()
     with _connection() as connection:
         insert_query = """
             INSERT INTO items (
                 text, category, reason, deadline, mandatory, source,
-                created_at, status, archived_path, attachments, source_id, is_poll_or_form, owner_id, workspace_id
+                created_at, status, archived_path, attachments, source_id, is_poll_or_form,
+                review_required, review_reasons, draft_eligible, owner_id, workspace_id
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         insert_with_conflict_handling = f"{insert_query} ON CONFLICT DO NOTHING"
         cursor = connection.execute(
@@ -295,6 +304,9 @@ def create_item(
                 json.dumps(attachments or []),
                 source_id,
                 bool(classification.get("is_poll_or_form", False)),
+                policy["review_required"],
+                json.dumps(policy["review_reasons"]),
+                policy["draft_eligible"],
                 owner_id,
                 workspace_id,
             ),
@@ -968,6 +980,9 @@ def _row_to_item(row: sqlite3.Row) -> dict[str, Any]:
     item = dict(row)
     item["mandatory"] = None if item["mandatory"] is None else bool(item["mandatory"])
     item["is_poll_or_form"] = bool(item.get("is_poll_or_form", False))
+    item["review_required"] = bool(item.get("review_required", False))
+    item["review_reasons"] = json.loads(item.get("review_reasons") or "[]")
+    item["draft_eligible"] = bool(item.get("draft_eligible", False))
     item["attachments"] = json.loads(item.get("attachments") or "[]")
     return item
 

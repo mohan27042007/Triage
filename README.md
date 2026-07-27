@@ -89,6 +89,11 @@ An opt-in, workspace-allowlisted worker can now read explicitly selected Gmail o
 Classroom sources only after the synthetic evaluation gate passes. See
 `docs/V2_AUTONOMOUS_GOOGLE_PILOT.md` before configuring any pilot worker.
 
+## V2 policy routing
+
+New items receive deterministic, persisted review reasons instead of an LLM confidence
+gate. See `docs/V2_POLICY_ROUTING.md` for the rules and explicit sender-metadata limit.
+
 ## Stack
 
 | Layer | Current implementation |
