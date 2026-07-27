@@ -28,9 +28,7 @@ from classifier import (
     draft_poll_or_form_response,
     draft_routine_form_response,
 )
-from classroom_sync import fetch_recent_classroom_items
 from document_ingestion import extract_document_text
-from gmail_sync import fetch_recent_gmail_messages
 from google_client import TOKEN_PATH
 from hosted_auth import (
     authorization_url,
@@ -49,6 +47,7 @@ from hosted_auth import (
 )
 from rate_limit import RateLimiter
 from reminder_schedule import parse_deadline
+from source_connectors import SourceConnection, get_source_connector
 from whatsapp_demo_data import WHATSAPP_DEMO_MESSAGES, WHATSAPP_DEMO_SOURCE
 from database import (
     create_assignment_help,
@@ -459,72 +458,55 @@ def pause_connection(source: str, request: Request) -> dict:
 @app.post("/sources/gmail/sync")
 def sync_gmail(request: Request) -> dict[str, int]:
     """Classify new inbox messages while preserving Gmail IDs for deduplication."""
-    if is_source_connection_paused("gmail", owner_id=request.state.owner_id):
-        raise HTTPException(status_code=409, detail="Gmail is paused. Resume it before syncing.")
-    try:
-        messages = fetch_recent_gmail_messages(owner_id=request.state.owner_id)
-        processed = 0
-        skipped = 0
-        for message in messages:
-            if get_item_by_source_id(
-                "gmail", message["id"], owner_id=request.state.owner_id, workspace_id=request.state.workspace_id
-            ):
-                skipped += 1
-                continue
-            create_item(
-                message["text"],
-                classify(message["text"]),
-                attachments=archive_source_attachments(
-                    ARCHIVE_DIRECTORY, message.get("attachments"), request.state.owner_id
-                ),
-                source="gmail",
-                source_id=message["id"],
-                owner_id=request.state.owner_id,
-                workspace_id=request.state.workspace_id,
-            )
-            processed += 1
-        record_source_sync("gmail", succeeded=True, imported_count=processed, owner_id=request.state.owner_id, workspace_id=request.state.workspace_id)
-        record_source_connection_outcome("gmail", succeeded=True, owner_id=request.state.owner_id)
-        return {"processed": processed, "skipped": skipped}
-    except RuntimeError as exc:
-        record_source_sync("gmail", succeeded=False, error_message="The Gmail sync could not finish. Retry when ready.", owner_id=request.state.owner_id, workspace_id=request.state.workspace_id)
-        record_source_connection_outcome("gmail", succeeded=False, error_message="The Gmail sync could not finish. Retry when ready.", owner_id=request.state.owner_id)
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return _sync_source("gmail", "Gmail", request)
 
 
 @app.post("/sources/classroom/sync")
 def sync_classroom(request: Request) -> dict[str, int]:
     """Classify new Classroom items while preserving IDs for deduplication."""
-    if is_source_connection_paused("classroom", owner_id=request.state.owner_id):
-        raise HTTPException(status_code=409, detail="Google Classroom is paused. Resume it before syncing.")
+    return _sync_source("classroom", "Google Classroom", request)
+
+
+def _sync_source(source: str, display_name: str, request: Request) -> dict[str, int]:
+    """Preserve current manual sync behavior while collecting through one connector."""
+    if is_source_connection_paused(source, owner_id=request.state.owner_id):
+        raise HTTPException(status_code=409, detail=f"{display_name} is paused. Resume it before syncing.")
     try:
-        items = fetch_recent_classroom_items(owner_id=request.state.owner_id)
+        result = get_source_connector(source).fetch_changes(
+            SourceConnection(
+                source=source,
+                owner_id=request.state.owner_id,
+                workspace_id=request.state.workspace_id,
+            ),
+            cursor=None,
+        )
         processed = 0
         skipped = 0
-        for item in items:
+        for item in result.items:
             if get_item_by_source_id(
-                "classroom", item["id"], owner_id=request.state.owner_id, workspace_id=request.state.workspace_id
+                source, item.source_id, owner_id=request.state.owner_id, workspace_id=request.state.workspace_id
             ):
                 skipped += 1
                 continue
             create_item(
-                item["text"],
-                classify(item["text"]),
+                item.text,
+                classify(item.text),
                 attachments=archive_source_attachments(
-                    ARCHIVE_DIRECTORY, item.get("attachments"), request.state.owner_id
+                    ARCHIVE_DIRECTORY, item.attachments, request.state.owner_id
                 ),
-                source="classroom",
-                source_id=item["id"],
+                source=source,
+                source_id=item.source_id,
                 owner_id=request.state.owner_id,
                 workspace_id=request.state.workspace_id,
             )
             processed += 1
-        record_source_sync("classroom", succeeded=True, imported_count=processed, owner_id=request.state.owner_id, workspace_id=request.state.workspace_id)
-        record_source_connection_outcome("classroom", succeeded=True, owner_id=request.state.owner_id)
+        record_source_sync(source, succeeded=True, imported_count=processed, owner_id=request.state.owner_id, workspace_id=request.state.workspace_id)
+        record_source_connection_outcome(source, succeeded=True, owner_id=request.state.owner_id)
         return {"processed": processed, "skipped": skipped}
     except RuntimeError as exc:
-        record_source_sync("classroom", succeeded=False, error_message="The Classroom sync could not finish. Retry when ready.", owner_id=request.state.owner_id, workspace_id=request.state.workspace_id)
-        record_source_connection_outcome("classroom", succeeded=False, error_message="The Classroom sync could not finish. Retry when ready.", owner_id=request.state.owner_id)
+        error_message = f"The {display_name} sync could not finish. Retry when ready."
+        record_source_sync(source, succeeded=False, error_message=error_message, owner_id=request.state.owner_id, workspace_id=request.state.workspace_id)
+        record_source_connection_outcome(source, succeeded=False, error_message=error_message, owner_id=request.state.owner_id)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 

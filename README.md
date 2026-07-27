@@ -77,6 +77,12 @@ Source schedules now run through a short-lived hosted PostgreSQL cron command th
 only enqueues jobs; it never syncs during an API request. See
 `docs/V2_EXTERNAL_SCHEDULING.md` for the Railway deployment boundary.
 
+## V2 connector abstraction
+
+Gmail and Classroom manual sync now use a shared normalized connector contract while
+remaining read-only and user-requested. See `docs/V2_CONNECTOR_ABSTRACTION.md` for
+the explicit cursor boundary and staging verification steps.
+
 ## Stack
 
 | Layer | Current implementation |
