@@ -1,0 +1,111 @@
+{
+  "version": "1.0.0",
+  "purpose": "Synthetic, non-sensitive regression corpus for Triage classification safety gates.",
+  "items": [
+    {
+      "id": "obligation-registration-deadline",
+      "text": "All final-year students must register for the internship briefing by 2026-08-15. Attendance will be checked.",
+      "expected_category": "Obligation",
+      "must_detect_obligation": true,
+      "tags": ["mandatory", "deadline", "registration"]
+    },
+    {
+      "id": "obligation-form-submission",
+      "text": "Please complete the hostel verification form with your name and roll number before Friday.",
+      "expected_category": "Obligation",
+      "must_detect_obligation": true,
+      "tags": ["form", "deadline"]
+    },
+    {
+      "id": "obligation-attendance",
+      "text": "Lab attendance is compulsory tomorrow at 9 AM. Students absent without approval will lose internal marks.",
+      "expected_category": "Obligation",
+      "must_detect_obligation": true,
+      "tags": ["mandatory", "attendance"]
+    },
+    {
+      "id": "obligation-completion-poll",
+      "text": "Students who finished the database assignment must reply DONE in the class poll by 5 PM today.",
+      "expected_category": "Obligation",
+      "must_detect_obligation": true,
+      "tags": ["poll", "deadline"]
+    },
+    {
+      "id": "obligation-optional-event",
+      "text": "You may register for the optional design workshop if you would like to attend this Saturday.",
+      "expected_category": "Obligation",
+      "must_detect_obligation": false,
+      "tags": ["optional", "registration"]
+    },
+    {
+      "id": "obligation-fee-reminder",
+      "text": "Semester examination fee payment closes on 2026-09-01. Submit the receipt to the office after payment.",
+      "expected_category": "Obligation",
+      "must_detect_obligation": true,
+      "tags": ["payment", "deadline"]
+    },
+    {
+      "id": "study-question-bank",
+      "text": "Attached is the Unit 3 question bank for Operating Systems. Revise scheduling, deadlocks, and memory management.",
+      "expected_category": "Study Material",
+      "must_detect_obligation": false,
+      "tags": ["question-bank", "unit-notes"]
+    },
+    {
+      "id": "study-lecture-notes",
+      "text": "Today's compiler design notes cover lexical analysis, parsing, and symbol tables for the midterm revision.",
+      "expected_category": "Study Material",
+      "must_detect_obligation": false,
+      "tags": ["notes", "revision"]
+    },
+    {
+      "id": "study-mock-paper",
+      "text": "Mock exam paper: answer the questions on normalization, transactions, and indexing. Use it for practice.",
+      "expected_category": "Study Material",
+      "must_detect_obligation": false,
+      "tags": ["mock-paper", "practice"]
+    },
+    {
+      "id": "study-syllabus",
+      "text": "The syllabus for Unit 4 lists finite automata, regular expressions, and context-free grammars.",
+      "expected_category": "Study Material",
+      "must_detect_obligation": false,
+      "tags": ["syllabus"]
+    },
+    {
+      "id": "noise-greeting",
+      "text": "Good morning everyone. Have a great week!",
+      "expected_category": "Noise",
+      "must_detect_obligation": false,
+      "tags": ["greeting"]
+    },
+    {
+      "id": "noise-promotion",
+      "text": "Student discount available at the campus cafe this weekend. Show your ID for ten percent off.",
+      "expected_category": "Noise",
+      "must_detect_obligation": false,
+      "tags": ["promotion"]
+    },
+    {
+      "id": "noise-completed-notice",
+      "text": "The library-book return deadline has been extended. Students who already returned their books need take no action.",
+      "expected_category": "Noise",
+      "must_detect_obligation": false,
+      "tags": ["notice", "no-action"]
+    },
+    {
+      "id": "noise-casual-chat",
+      "text": "Can someone share yesterday's cafeteria menu photo?",
+      "expected_category": "Noise",
+      "must_detect_obligation": false,
+      "tags": ["casual-chat"]
+    },
+    {
+      "id": "noise-duplicate-summary",
+      "text": "Reminder only: the department already confirmed that there are no classes tomorrow.",
+      "expected_category": "Noise",
+      "must_detect_obligation": false,
+      "tags": ["notice", "no-action"]
+    }
+  ]
+}

@@ -32,6 +32,14 @@ Triage is intentionally review-first:
 - It does **not** produce complete academic submissions. Assignment help is planning and self-checking support only.
 - Gmail and Classroom access is read-only and is currently supported through the local OAuth workflow.
 
+## V2 guardrails
+
+Before autonomous source processing is introduced, Triage maintains a synthetic-only
+classification regression corpus and explicit quality gates for obligation recall.
+See `docs/V2_EVALUATION_GUARDRAILS.md` for the evaluation command, thresholds, secret
+handling, retention target, and incident runbook. Real user messages must never be
+added to the committed corpus.
+
 ## Stack
 
 | Layer | Current implementation |

@@ -91,6 +91,7 @@ backend/archive/
 backend/seed_demo_video_data.py
 backend/credentials.json
 backend/token.json
+backend/evaluations/private/
 
 # Salt
 .salt
