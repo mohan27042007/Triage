@@ -97,6 +97,18 @@ class SyncJobTests(unittest.TestCase):
         self.assertEqual(result["job"]["state"], "succeeded")
         self.assertEqual(result["job"]["outcome"], {"imported_count": 0, "source": "gmail"})
 
+    def test_scheduler_uses_idempotent_source_time_windows_and_skips_paused_connections(self) -> None:
+        first = sync_jobs.enqueue_due_sync_jobs(now="2026-07-27T12:01:00+00:00")
+        duplicate_window = sync_jobs.enqueue_due_sync_jobs(now="2026-07-27T12:04:00+00:00")
+        next_window = sync_jobs.enqueue_due_sync_jobs(now="2026-07-27T12:30:00+00:00")
+        database.set_source_connection_state("gmail", "paused", owner_id="student-a")
+        paused = sync_jobs.enqueue_due_sync_jobs(now="2026-07-27T13:00:00+00:00")
+
+        self.assertEqual(first["connections_considered"], 1)
+        self.assertEqual(first["job_ids"], duplicate_window["job_ids"])
+        self.assertNotEqual(first["job_ids"], next_window["job_ids"])
+        self.assertEqual(paused, {"connections_considered": 0, "job_ids": []})
+
 
 if __name__ == "__main__":
     unittest.main()

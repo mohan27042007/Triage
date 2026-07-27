@@ -71,6 +71,12 @@ Hosted source work now has a durable, leased PostgreSQL job model with idempoten
 and bounded retries. It does not schedule or autonomously sync sources yet; see
 `docs/V2_DURABLE_JOB_QUEUE.md` for the worker and deployment contract.
 
+## V2 external scheduling
+
+Source schedules now run through a short-lived hosted PostgreSQL cron command that
+only enqueues jobs; it never syncs during an API request. See
+`docs/V2_EXTERNAL_SCHEDULING.md` for the Railway deployment boundary.
+
 ## Stack
 
 | Layer | Current implementation |

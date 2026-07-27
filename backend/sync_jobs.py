@@ -50,6 +50,38 @@ def enqueue_sync_job(
     return _row_to_job(row)
 
 
+def enqueue_due_sync_jobs(*, now: str | None = None) -> dict[str, Any]:
+    """Enqueue one idempotent time-window job for each due enabled connection."""
+    scheduled_at = datetime.fromisoformat(now) if now else datetime.now(timezone.utc)
+    if scheduled_at.tzinfo is None:
+        raise ValueError("Schedule time must include a timezone offset.")
+    scheduled_at = scheduled_at.astimezone(timezone.utc)
+    with database._connection() as connection:
+        connections = connection.execute(
+            """
+            SELECT owner_id, workspace_id, source, sync_interval_minutes
+            FROM source_connections
+            WHERE state = 'enabled' AND workspace_id IS NOT NULL
+            ORDER BY workspace_id ASC, source ASC
+            """
+        ).fetchall()
+    job_ids: list[int] = []
+    for connection in connections:
+        interval_minutes = int(connection["sync_interval_minutes"])
+        window_start = _schedule_window_start(scheduled_at, interval_minutes)
+        job = enqueue_sync_job(
+            connection["source"],
+            workspace_id=int(connection["workspace_id"]),
+            owner_id=connection["owner_id"],
+            idempotency_key=(
+                f"scheduled:{connection['workspace_id']}:{connection['source']}:{int(window_start.timestamp())}"
+            ),
+            available_at=scheduled_at.isoformat(),
+        )
+        job_ids.append(int(job["id"]))
+    return {"connections_considered": len(connections), "job_ids": job_ids}
+
+
 def claim_next_sync_job(
     worker_id: str,
     *,
@@ -278,3 +310,9 @@ def _after_seconds(value: str, seconds: int) -> str:
 def _retry_delay_seconds(attempt_count: int) -> int:
     delay = min(3_600, 60 * (2 ** max(attempt_count - 1, 0)))
     return delay + secrets.randbelow(max(1, delay // 4))
+
+
+def _schedule_window_start(scheduled_at: datetime, interval_minutes: int) -> datetime:
+    interval_seconds = interval_minutes * 60
+    window_epoch = int(scheduled_at.timestamp()) // interval_seconds * interval_seconds
+    return datetime.fromtimestamp(window_epoch, timezone.utc)

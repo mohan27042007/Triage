@@ -35,8 +35,8 @@ python sync_worker.py --run-once --worker-id worker-a --handler package.module:f
 ```
 
 The handler is explicit rather than built in. Without `--handler`, the command exits
-without claiming work. No source handler or scheduler is configured in this step, so
-the queue cannot accidentally enable autonomous syncing before its later safety gate.
+without claiming work. The queue contains no source handler; scheduling is configured
+separately and still cannot autonomously sync before the later connector safety gate.
 
 ## Deployment checks
 
