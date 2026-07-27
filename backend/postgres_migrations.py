@@ -250,6 +250,53 @@ def _create_sync_jobs(connection) -> None:
     )
 
 
+def _create_operational_controls(connection) -> None:
+    """Create privacy-minimized operational records after workspace and job tables exist."""
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS audit_events (
+            id BIGSERIAL PRIMARY KEY,
+            workspace_id BIGINT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+            owner_id TEXT NOT NULL,
+            actor_type TEXT NOT NULL CHECK (actor_type IN ('system', 'user')),
+            event_type TEXT NOT NULL,
+            item_id BIGINT REFERENCES items(id) ON DELETE SET NULL,
+            sync_job_id BIGINT REFERENCES sync_jobs(id) ON DELETE SET NULL,
+            outcome TEXT NOT NULL,
+            error_code TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    """)
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_audit_events_workspace_created "
+        "ON audit_events(workspace_id, created_at DESC)"
+    )
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS notification_deliveries (
+            id BIGSERIAL PRIMARY KEY,
+            workspace_id BIGINT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+            owner_id TEXT NOT NULL,
+            notification_type TEXT NOT NULL,
+            item_id BIGINT REFERENCES items(id) ON DELETE SET NULL,
+            sync_job_id BIGINT REFERENCES sync_jobs(id) ON DELETE SET NULL,
+            status TEXT NOT NULL,
+            error_code TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    """)
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_notification_deliveries_workspace_created "
+        "ON notification_deliveries(workspace_id, created_at DESC)"
+    )
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS workspace_kill_switches (
+            workspace_id BIGINT PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
+            enabled BOOLEAN NOT NULL DEFAULT FALSE,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_by TEXT
+        )
+    """)
+
+
 CORE_POSTGRES_MIGRATIONS = (
     PostgresMigration("2026-07-26-core-schema-v1", _create_core_schema),
     PostgresMigration("2026-07-27-core-workspace-columns-v1", _ensure_core_workspace_columns),
@@ -262,4 +309,5 @@ HOSTED_POSTGRES_MIGRATIONS = (
     PostgresMigration("2026-07-27-source-connections-v1", _create_source_connections),
     PostgresMigration("2026-07-27-workspace-source-dedupe-v1", _correct_item_dedupe),
     PostgresMigration("2026-07-27-workspace-sync-jobs-v1", _create_sync_jobs),
+    PostgresMigration("2026-07-27-workspace-sync-z-operational-controls-v1", _create_operational_controls),
 )

@@ -26,6 +26,10 @@ class AutonomousGoogleWorkerTests(unittest.TestCase):
         self.original_ingest = worker.ingest_source_changes
         self.original_record_sync = worker.record_source_sync
         self.original_record_outcome = worker.record_source_connection_outcome
+        self.original_audit = worker.record_audit_event
+        self.original_kill_switch = worker.is_workspace_kill_switch_enabled
+        worker.record_audit_event = lambda **kwargs: None
+        worker.is_workspace_kill_switch_enabled = lambda workspace_id: False
 
     def tearDown(self) -> None:
         os.environ.clear()
@@ -34,6 +38,8 @@ class AutonomousGoogleWorkerTests(unittest.TestCase):
         worker.ingest_source_changes = self.original_ingest
         worker.record_source_sync = self.original_record_sync
         worker.record_source_connection_outcome = self.original_record_outcome
+        worker.record_audit_event = self.original_audit
+        worker.is_workspace_kill_switch_enabled = self.original_kill_switch
 
     def test_execution_requires_enabled_allowlisted_connection_and_records_success(self) -> None:
         events = []

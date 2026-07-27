@@ -94,6 +94,12 @@ Classroom sources only after the synthetic evaluation gate passes. See
 New items receive deterministic, persisted review reasons instead of an LLM confidence
 gate. See `docs/V2_POLICY_ROUTING.md` for the rules and explicit sender-metadata limit.
 
+## V2 operational controls
+
+Hosted workspaces now have redacted audit outcomes, an autonomous-work kill switch,
+and an approval-gated operational retention command. See
+`docs/V2_AUDIT_RETENTION_KILL_SWITCH.md` before enabling any maintenance run.
+
 ## Stack
 
 | Layer | Current implementation |

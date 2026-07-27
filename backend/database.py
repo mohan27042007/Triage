@@ -3,7 +3,7 @@
 import os
 import sqlite3
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -194,6 +194,55 @@ def initialize_database() -> None:
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_sync_jobs_claim "
             "ON sync_jobs(state, available_at, lease_expires_at)"
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS audit_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                workspace_id INTEGER NOT NULL,
+                owner_id TEXT NOT NULL,
+                actor_type TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                item_id INTEGER,
+                sync_job_id INTEGER,
+                outcome TEXT NOT NULL,
+                error_code TEXT,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_audit_events_workspace_created "
+            "ON audit_events(workspace_id, created_at DESC)"
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS notification_deliveries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                workspace_id INTEGER NOT NULL,
+                owner_id TEXT NOT NULL,
+                notification_type TEXT NOT NULL,
+                item_id INTEGER,
+                sync_job_id INTEGER,
+                status TEXT NOT NULL,
+                error_code TEXT,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_notification_deliveries_workspace_created "
+            "ON notification_deliveries(workspace_id, created_at DESC)"
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS workspace_kill_switches (
+                workspace_id INTEGER PRIMARY KEY,
+                enabled INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL,
+                updated_by TEXT
+            )
+            """
         )
         _add_column_if_missing(connection, "items", "archived_path", "TEXT")
         _add_column_if_missing(connection, "items", "attachments", "TEXT NOT NULL DEFAULT '[]'")
@@ -516,6 +565,120 @@ def get_source_connections(owner_id: str = DEFAULT_OWNER_ID) -> list[dict[str, A
             "SELECT * FROM source_connections WHERE owner_id = ? ORDER BY source ASC", (owner_id,)
         ).fetchall()
     return [_row_to_source_connection(row) for row in rows]
+
+
+def record_audit_event(
+    *,
+    workspace_id: int,
+    owner_id: str,
+    actor_type: str,
+    event_type: str,
+    outcome: str,
+    item_id: int | None = None,
+    sync_job_id: int | None = None,
+    error_code: str | None = None,
+) -> None:
+    """Append a privacy-minimized audit event without source content or credentials."""
+    if actor_type not in {"system", "user"}:
+        raise ValueError("Audit actor type must be system or user.")
+    if not event_type.strip() or not outcome.strip():
+        raise ValueError("Audit event type and outcome are required.")
+    if error_code is not None and (not error_code.strip() or len(error_code) > 80):
+        raise ValueError("Audit error code must be between 1 and 80 characters.")
+    with _connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO audit_events (
+                workspace_id, owner_id, actor_type, event_type, item_id, sync_job_id,
+                outcome, error_code, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                workspace_id, owner_id, actor_type, event_type, item_id, sync_job_id,
+                outcome, error_code, datetime.now().astimezone().isoformat(),
+            ),
+        )
+
+
+def get_audit_events(
+    *, owner_id: str = DEFAULT_OWNER_ID, workspace_id: int | None = None, limit: int = 100
+) -> list[dict[str, Any]]:
+    """Return privacy-minimized audit records for the current owner/workspace only."""
+    if not 1 <= limit <= 200:
+        raise ValueError("Audit limit must be between 1 and 200.")
+    clauses = ["owner_id = ?"]
+    parameters: list[Any] = [owner_id]
+    if workspace_id is not None:
+        clauses.append("workspace_id = ?")
+        parameters.append(workspace_id)
+    with _connection() as connection:
+        rows = connection.execute(
+            f"SELECT * FROM audit_events WHERE {' AND '.join(clauses)} ORDER BY created_at DESC, id DESC LIMIT ?",
+            [*parameters, limit],
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def set_workspace_kill_switch(workspace_id: int, enabled: bool, *, updated_by: str) -> bool:
+    """Stop queued/leased autonomous work for one workspace without affecting manual use."""
+    if not isinstance(workspace_id, int) or workspace_id < 1:
+        raise ValueError("Workspace ID is required.")
+    if not updated_by.strip():
+        raise ValueError("Kill-switch actor is required.")
+    now = datetime.now().astimezone().isoformat()
+    with _connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO workspace_kill_switches (workspace_id, enabled, updated_at, updated_by)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT (workspace_id) DO UPDATE SET
+                enabled = excluded.enabled, updated_at = excluded.updated_at, updated_by = excluded.updated_by
+            """,
+            (workspace_id, bool(enabled), now, updated_by),
+        )
+        if enabled:
+            connection.execute(
+                """
+                UPDATE sync_jobs
+                SET state = 'cancelled', lease_token = NULL, lease_expires_at = NULL,
+                    completed_at = ?, updated_at = ?
+                WHERE workspace_id = ? AND state IN ('queued', 'running')
+                """,
+                (now, now, workspace_id),
+            )
+    return bool(enabled)
+
+
+def is_workspace_kill_switch_enabled(workspace_id: int | None) -> bool:
+    """Return whether autonomous scheduling/worker execution is stopped for a workspace."""
+    if workspace_id is None:
+        return False
+    with _connection() as connection:
+        row = connection.execute(
+            "SELECT enabled FROM workspace_kill_switches WHERE workspace_id = ?", (workspace_id,)
+        ).fetchone()
+    return bool(row and row["enabled"])
+
+
+def purge_expired_operational_records(retention_days: int, *, now: datetime | None = None) -> dict[str, int]:
+    """Delete only terminal-job/audit/delivery operational records older than retention."""
+    if not 7 <= retention_days <= 3_650:
+        raise ValueError("Retention must be between 7 and 3650 days.")
+    cutoff = (now or datetime.now().astimezone()) - timedelta(days=retention_days)
+    cutoff_value = cutoff.isoformat()
+    with _connection() as connection:
+        audit = connection.execute("DELETE FROM audit_events WHERE created_at < ?", (cutoff_value,)).rowcount
+        deliveries = connection.execute(
+            "DELETE FROM notification_deliveries WHERE created_at < ?", (cutoff_value,)
+        ).rowcount
+        jobs = connection.execute(
+            """
+            DELETE FROM sync_jobs
+            WHERE state IN ('succeeded', 'failed', 'cancelled') AND completed_at < ?
+            """,
+            (cutoff_value,),
+        ).rowcount
+    return {"audit_events": audit, "notification_deliveries": deliveries, "sync_jobs": jobs}
 
 
 def set_source_connection_state(

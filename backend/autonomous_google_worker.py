@@ -9,6 +9,8 @@ from typing import Any
 
 from database import (
     get_source_connection_runtime,
+    is_workspace_kill_switch_enabled,
+    record_audit_event,
     record_source_connection_outcome,
     record_source_sync,
 )
@@ -33,6 +35,8 @@ def execute_sync_job(job: dict[str, Any]) -> dict[str, Any]:
     source = job["source"]
     owner_id = job["owner_id"]
     workspace_id = int(job["workspace_id"])
+    if is_workspace_kill_switch_enabled(workspace_id):
+        raise PilotBlockedError("workspace_kill_switch_enabled")
     connection = get_source_connection_runtime(source, owner_id=owner_id)
     if connection is None or connection["workspace_id"] != workspace_id:
         raise PilotBlockedError("source_connection_missing")
@@ -54,9 +58,17 @@ def execute_sync_job(job: dict[str, Any]) -> dict[str, Any]:
         error_code = "google_sync_failed"
         record_source_sync(source, succeeded=False, error_message=error_code, owner_id=owner_id, workspace_id=workspace_id)
         record_source_connection_outcome(source, succeeded=False, error_message=error_code, owner_id=owner_id)
+        record_audit_event(
+            workspace_id=workspace_id, owner_id=owner_id, actor_type="system",
+            event_type="source_sync", sync_job_id=int(job["id"]), outcome="failed", error_code=error_code,
+        )
         raise PilotBlockedError(error_code) from exc
     record_source_sync(source, succeeded=True, imported_count=outcome["processed"], owner_id=owner_id, workspace_id=workspace_id)
     record_source_connection_outcome(source, succeeded=True, owner_id=owner_id)
+    record_audit_event(
+        workspace_id=workspace_id, owner_id=owner_id, actor_type="system",
+        event_type="source_sync", sync_job_id=int(job["id"]), outcome="succeeded",
+    )
     return {"processed": outcome["processed"], "skipped": outcome["skipped"], "source": source}
 
 

@@ -65,15 +65,19 @@ from database import (
     get_recent_items,
     get_pending_actions,
     get_source_sync_status,
+    get_audit_events,
     get_source_connections,
     get_study_plan,
     initialize_database,
+    is_workspace_kill_switch_enabled,
     is_source_connection_paused,
     record_source_connection_outcome,
     reject_pending_action,
     record_source_sync,
     replace_study_plan,
     set_source_connection_state,
+    set_workspace_kill_switch,
+    record_audit_event,
     DEFAULT_OWNER_ID,
 )
 
@@ -409,6 +413,42 @@ def source_status(request: Request) -> dict[str, object]:
         "google_authorized": authorized,
         "sources": get_source_sync_status(request.state.owner_id),
         "connections": get_source_connections(request.state.owner_id),
+    }
+
+
+@app.get("/workspace/automation")
+def workspace_automation_status(request: Request) -> dict[str, bool]:
+    """Return the current workspace's autonomous-work kill-switch state."""
+    if request.state.workspace_id is None:
+        return {"automation_paused": False}
+    return {"automation_paused": is_workspace_kill_switch_enabled(request.state.workspace_id)}
+
+
+@app.post("/workspace/automation")
+async def set_workspace_automation(request: Request) -> dict[str, bool]:
+    """Pause/resume autonomous work for the signed-in user's personal workspace."""
+    if request.state.workspace_id is None:
+        raise HTTPException(status_code=409, detail="Workspace automation is unavailable in local demo mode.")
+    try:
+        payload = await request.json()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid JSON body.") from exc
+    enabled = payload.get("automation_paused") if isinstance(payload, dict) else None
+    if not isinstance(enabled, bool):
+        raise HTTPException(status_code=400, detail='Use {"automation_paused": true|false}.')
+    set_workspace_kill_switch(request.state.workspace_id, enabled, updated_by=request.state.owner_id)
+    record_audit_event(
+        workspace_id=request.state.workspace_id, owner_id=request.state.owner_id, actor_type="user",
+        event_type="workspace_kill_switch", outcome="enabled" if enabled else "disabled",
+    )
+    return {"automation_paused": enabled}
+
+
+@app.get("/workspace/audit-events")
+def workspace_audit_events(request: Request) -> dict[str, list[dict]]:
+    """Expose only redacted operational outcomes for the signed-in workspace."""
+    return {
+        "events": get_audit_events(owner_id=request.state.owner_id, workspace_id=request.state.workspace_id)
     }
 
 

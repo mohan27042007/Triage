@@ -85,8 +85,9 @@ privacy-control task; do not represent it as implemented until tests prove it.
 
 ## Incident and operating runbook
 
-1. **Stop:** use the future workspace kill switch; until it ships, disable the
-   affected source connection and worker/scheduler deployment immediately.
+1. **Stop:** enable the affected workspace's automation kill switch; it cancels its
+   queued/leased jobs and blocks scheduler/worker collection. Also disable the
+   worker/scheduler deployment if broader containment is required.
 2. **Contain:** revoke affected OAuth tokens, API keys, or storage credentials;
    do not retry a suspected compromised connection.
 3. **Preserve minimal evidence:** record timestamps, workspace/source identifiers,

@@ -59,10 +59,16 @@ def enqueue_due_sync_jobs(*, now: str | None = None) -> dict[str, Any]:
     with database._connection() as connection:
         connections = connection.execute(
             """
-            SELECT owner_id, workspace_id, source, selected_channels, sync_interval_minutes
+            SELECT source_connections.owner_id, source_connections.workspace_id,
+                   source_connections.source, source_connections.selected_channels,
+                   source_connections.sync_interval_minutes
             FROM source_connections
-            WHERE state = 'enabled' AND workspace_id IS NOT NULL
-            ORDER BY workspace_id ASC, source ASC
+            LEFT JOIN workspace_kill_switches
+              ON workspace_kill_switches.workspace_id = source_connections.workspace_id
+            WHERE source_connections.state = 'enabled'
+              AND source_connections.workspace_id IS NOT NULL
+              AND COALESCE(workspace_kill_switches.enabled, FALSE) = FALSE
+            ORDER BY source_connections.workspace_id ASC, source_connections.source ASC
             """
         ).fetchall()
     job_ids: list[int] = []
@@ -109,12 +115,15 @@ def claim_next_sync_job(
                     JOIN source_connections
                       ON source_connections.owner_id = sync_jobs.owner_id
                      AND source_connections.source = sync_jobs.source
+                    LEFT JOIN workspace_kill_switches
+                      ON workspace_kill_switches.workspace_id = sync_jobs.workspace_id
                     WHERE (
                         (sync_jobs.state = 'queued' AND sync_jobs.available_at <= NOW())
                         OR (sync_jobs.state = 'running' AND sync_jobs.lease_expires_at <= NOW())
                     )
                       AND sync_jobs.attempt_count < sync_jobs.max_attempts
                       AND source_connections.state = 'enabled'
+                      AND COALESCE(workspace_kill_switches.enabled, FALSE) = FALSE
                     ORDER BY sync_jobs.available_at ASC, sync_jobs.id ASC
                     FOR UPDATE OF sync_jobs SKIP LOCKED
                     LIMIT 1
@@ -141,12 +150,15 @@ def claim_next_sync_job(
                 JOIN source_connections
                   ON source_connections.owner_id = sync_jobs.owner_id
                  AND source_connections.source = sync_jobs.source
+                LEFT JOIN workspace_kill_switches
+                  ON workspace_kill_switches.workspace_id = sync_jobs.workspace_id
                 WHERE (
                     (sync_jobs.state = 'queued' AND sync_jobs.available_at <= ?)
                     OR (sync_jobs.state = 'running' AND sync_jobs.lease_expires_at <= ?)
                 )
                   AND sync_jobs.attempt_count < sync_jobs.max_attempts
                   AND source_connections.state = 'enabled'
+                  AND COALESCE(workspace_kill_switches.enabled, FALSE) = FALSE
                 ORDER BY sync_jobs.available_at ASC, sync_jobs.id ASC
                 LIMIT 1
                 """,
