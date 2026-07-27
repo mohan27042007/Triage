@@ -685,9 +685,110 @@ The deployed demo now supports the intended flow: public landing page → demo l
 
 ---
 
-## Build Summary Table (updated through Jul 22)
+## Jul 22–26 — Completing the Day 9 Local-First and Hosted Foundations
 
-Credit records before Jul 21 are retained from the original build log. The project’s current balance was reported as approximately **1,900 credits**. Entries labelled “estimated” are allocations of the approximately 286-credit difference from the last recorded balance (2,186) and are not presented as exact billing records.
+This phase turned the earlier demo-ready build into a more complete,
+review-first student desk without widening the external-action boundary.
+Every Google integration remains read-only; WhatsApp remains representative
+demo data; and no form, poll, or message is submitted on a student's behalf
+by Triage.
+
+### Day 9a — Routine form drafting (`82adb41`)
+
+Routine form support moved from blank examples to safe, reviewable drafts.
+Triage detects explicit routine form contexts and a small allow-list of
+fields (such as name, roll number, email, phone, programme, and section),
+then prepares an editable copy-only response using only student-provided
+details. A form-draft review is intentionally distinct from marking the
+underlying obligation done, and no profile detail is invented or sent to
+the classifier.
+
+### Days 9b–9f — Completing the local student-desk workflow
+
+- **Day 9b — local deadline reminders (`daa4b50`):** completed the in-tab
+  reminder flow with per-item snooze/dismiss behaviour and opt-in browser
+  notifications. It remains local to an open browser tab.
+- **Day 9c — local attachment archiving (`ceb87ef`):** retained uploaded
+  files plus newly synced Gmail attachments and accessible Classroom Drive
+  files, with authenticated downloads. Tests use temporary archives and
+  databases rather than real student data.
+- **Day 9d — unified local stream (`485f21a`):** added the chronological,
+  source-labelled feed across manual, Gmail, Classroom, and WhatsApp-demo
+  items. It refreshes while the tab is open via polling, not a claimed
+  real-time webhook.
+- **Day 9e — archive/history destination (`9380970`):** added a dedicated
+  searchable history panel with source/category/status filters, item detail,
+  queue routing, and retained-file access.
+- **Day 9f — command palette and accessibility polish (`da0d544`):** added
+  the keyboard command palette, documented keyboard navigation, and kept
+  the student desk usable without relying only on pointer interaction.
+
+### Days 9g–9i — Theme reliability and hosted Google sign-in
+
+- **Day 9g — theme contrast and visibility (`c55dacb`):** repaired light and
+  dark theme contrast so controls, metadata, dialogs, and source cards stay
+  legible after a theme change.
+- **Day 9h — hosted Google OAuth foundation (`6bba334`):** added per-user
+  hosted Google Web OAuth, encrypted credential storage, hashed sessions,
+  Postgres-backed records, and user scoping for Gmail/Classroom ingestion.
+  Local desktop OAuth remains available for local development.
+- **Day 9i — OAuth scope normalization (`7581bd4`):** fixed the hosted
+  callback failure caused when Google returned an equivalent but differently
+  expressed granted-scope set. The implementation now normalizes Google’s
+  standard OpenID/user-info aliases while retaining the intended read-only
+  Gmail, Classroom, and Drive permissions.
+
+### Days 9j–9l — Durable files, richer uploads, and durable reminders
+
+- **Day 9j — durable attachment storage (`151e800`):** added a private
+  S3-compatible storage path, including Cloudflare R2 support, owner-hashed
+  object namespaces, and authenticated downloads. Local disk remains the
+  default; configuring a real bucket was deliberately deferred.
+- **Day 9k — PDF and DOCX ingestion (`0017930`):** added selectable-text PDF
+  and DOCX extraction for classification and study planning. Image-only PDFs
+  are rejected rather than OCR-guessed, and the original accepted bytes are
+  still retained through the archive path.
+- **Day 9l — durable deadline reminders (`3c8528d`):** added opt-in hosted
+  Web Push plumbing, encrypted browser subscriptions, and a protected
+  scheduler endpoint for one privacy-preserving today/tomorrow summary. The
+  hosted VAPID keys and scheduler remain deployment configuration, not an
+  automatically enabled service.
+
+### Days 9m–9p — Production safeguards, accessibility, data safety, and source health
+
+- **Day 9m — production safeguards (`6a55c8f`):** added baseline response
+  security headers, conservative rate limits, hosted-session revocation on
+  sign-out, and configuration guidance for Railway proxy handling.
+- **Day 9n — responsive accessibility (`5c25556`):** improved dialog focus
+  trapping and focus restoration, explicit close controls, touch target
+  sizing, and dynamic mobile viewport behaviour.
+- **Day 9o — data safeguards (`fde400c`):** added an additive schema
+  migration ledger, owner-scoped portable data export, and explicit backup /
+  retention guidance. The export intentionally excludes archive bytes and
+  browser-only form details.
+- **Day 9p — source connection health (`2fb9a0d`):** persisted per-user
+  Gmail/Classroom sync outcomes, displayed clear setup/failure states and an
+  explicit retry action, and added isolated tests. It never performs a
+  background Google health probe or automatic retry.
+
+### Validation and data-safety discipline
+
+The Day 9 additions were validated with Python compilation, JavaScript
+syntax checks, Git whitespace checks, and isolated temporary-database/
+temporary-archive tests. `backend/triage.db`, OAuth credentials and tokens,
+the archive directory, and the local demo seeder remain Git-ignored and were
+not included in these commits.
+
+---
+
+## Build Summary Table (updated through Day 9p / Jul 26)
+
+Credit records before Jul 21 are retained from the original build log. The
+last reported balance at Day 9p was approximately **1,200 credits**. No
+per-task readings were captured during Day 9, so the Day 9 allocations below
+are estimates only: together they account for the approximately **700-credit**
+change from the previously reported ~1,900 balance. They are not presented as
+exact billing records.
 
 | Date / phase | Work | Commit(s) | Credit use |
 | --- | --- | --- | --- |
@@ -708,4 +809,7 @@ Credit records before Jul 21 are retained from the original build log. The proje
 | Jul 21 | Landing flow, app controls, and product polish | `76fa2ae`, `029b55a`, `33ab2d2` | Estimated ~80 credits |
 | Jul 21–22 | Command-desk layout, pulse rail, and brand refinements | `ad53a9f`, `5e32cd5`, `58aeed4`, `3a8415b`, `ab09c87` | Estimated ~80 credits |
 | Jul 22 | Local demo-data preparation and documentation updates (working tree at this log update) | Not yet committed | Estimated ~56 credits |
-| **Current reported balance** | **Credits remaining** | — | **~1,900** |
+| Jul 22 | Days 9a–9f: safe routine-form drafts, local reminders/archive, unified stream, history, command palette | `82adb41`, `daa4b50`, `ceb87ef`, `485f21a`, `9380970`, `da0d544` | Estimated ~190 credits |
+| Jul 23–25 | Days 9g–9l: theme visibility, hosted OAuth/scope repair, durable storage code, PDF/DOCX, Web Push code | `c55dacb`, `6bba334`, `7581bd4`, `151e800`, `0017930`, `3c8528d` | Estimated ~300 credits |
+| Jul 26 | Days 9m–9p: production safeguards, responsive accessibility, data export/migrations, source health | `6a55c8f`, `5c25556`, `fde400c`, `2fb9a0d` | Estimated ~210 credits |
+| **Current reported balance at Day 9p** | **Credits remaining** | `2fb9a0d66573aa03dc055dea4a8b1457383ff0d9` | **~1,200** |
