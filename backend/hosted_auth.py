@@ -30,6 +30,7 @@ except ImportError:
 
 from google_client import GOOGLE_SCOPES
 from reminder_schedule import parse_deadline, reminder_window
+from workspace_foundation import ensure_personal_workspace, initialize_workspace_foundation
 
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "").rstrip("/")
@@ -120,6 +121,7 @@ def initialize() -> None:
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
         """)
+        initialize_workspace_foundation(connection)
         connection.execute("""
             CREATE TABLE IF NOT EXISTS google_connections (
                 user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
@@ -212,6 +214,7 @@ def complete_authorization(code: str, state: str) -> tuple[str, str]:
             """,
             (identity["sub"], identity["email"], identity.get("name")),
         ).fetchone()
+        ensure_personal_workspace(connection, user["id"], identity.get("name"))
         connection.execute(
             """
             INSERT INTO google_connections (user_id, encrypted_credentials, scopes)
@@ -239,6 +242,22 @@ def session_user(token: str) -> str | None:
             (_hash(token),),
         ).fetchone()
     return str(row["user_id"]) if row else None
+
+
+def workspace_for_user(user_id: str) -> int | None:
+    """Return the user's personal workspace during the owner-to-workspace transition."""
+    if not HOSTED_AUTH_ENABLED:
+        return None
+    with _connection() as connection:
+        row = connection.execute(
+            """
+            SELECT workspace_id FROM workspace_memberships
+            WHERE user_id = %s AND role = 'individual'
+            ORDER BY workspace_id ASC LIMIT 1
+            """,
+            (user_id,),
+        ).fetchone()
+    return int(row["workspace_id"]) if row else None
 
 
 def revoke_session(token: str) -> None:

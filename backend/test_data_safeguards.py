@@ -19,9 +19,14 @@ def main() -> None:
                 "Submit the library form by 2026-08-01.",
                 {"category": "Obligation", "reason": "Explicit form deadline.", "deadline": "2026-08-01", "mandatory": True},
                 owner_id="student-a",
+                workspace_id=101,
             )
             assert item is not None
-            database.create_pending_action(item["id"], "mark_done", {"item_id": item["id"]}, owner_id="student-a")
+            assert item["workspace_id"] == 101
+            action = database.create_pending_action(
+                item["id"], "mark_done", {"item_id": item["id"]}, owner_id="student-a", workspace_id=101
+            )
+            assert action["workspace_id"] == 101
             database.create_item(
                 "Other student's private notice.",
                 {"category": "Noise", "reason": "Not relevant.", "deadline": None, "mandatory": False},
@@ -32,7 +37,9 @@ def main() -> None:
             assert exported["format"] == "triage-data-export/v1"
             assert len(exported["items"]) == 1
             assert exported["items"][0]["text"].startswith("Submit")
+            assert exported["items"][0]["workspace_id"] == 101
             assert len(exported["pending_actions"]) == 1
+            assert exported["pending_actions"][0]["workspace_id"] == 101
             assert {entry["id"] for entry in exported["schema_migrations"]} == set(database.SCHEMA_MIGRATION_IDS)
             assert "Archived file bytes" in exported["note"]
         finally:

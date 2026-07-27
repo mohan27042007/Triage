@@ -40,6 +40,13 @@ See `docs/V2_EVALUATION_GUARDRAILS.md` for the evaluation command, thresholds, s
 handling, retention target, and incident runbook. Real user messages must never be
 added to the committed corpus.
 
+## V2 workspace foundation
+
+Hosted accounts now receive one personal workspace and an `individual` membership.
+Current owner-scoped behavior remains compatible while `workspace_id` is written for
+new hosted records. See `docs/V2_WORKSPACE_FOUNDATION.md` for the additive migration
+behavior and staging verification steps.
+
 ## Stack
 
 | Layer | Current implementation |

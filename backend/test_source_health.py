@@ -21,13 +21,13 @@ def main() -> None:
             database.initialize_database()
             assert database.get_source_sync_status("student-a") == {}
 
-            database.record_source_sync("gmail", succeeded=True, imported_count=3, owner_id="student-a")
+            database.record_source_sync("gmail", succeeded=True, imported_count=3, owner_id="student-a", workspace_id=101)
             first = database.get_source_sync_status("student-a")["gmail"]
             assert first["last_success_at"] == first["last_attempt_at"]
             assert first["last_imported_count"] == 3
             assert first["last_error"] is None
 
-            database.record_source_sync("gmail", succeeded=False, error_message="x" * 200, owner_id="student-a")
+            database.record_source_sync("gmail", succeeded=False, error_message="x" * 200, owner_id="student-a", workspace_id=101)
             failed = database.get_source_sync_status("student-a")["gmail"]
             assert failed["last_error"] == "x" * 160
             assert failed["last_success_at"] == first["last_success_at"]

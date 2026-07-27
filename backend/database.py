@@ -15,6 +15,7 @@ VALID_ITEM_SOURCES = {"manual", "gmail", "classroom", "whatsapp-demo"}
 SCHEMA_MIGRATION_IDS = (
     "2026-07-26-data-safeguards-v1",
     "2026-07-26-source-health-v1",
+    "2026-07-27-workspace-foundation-v1",
 )
 
 
@@ -73,7 +74,8 @@ def initialize_database() -> None:
                 attachments TEXT NOT NULL DEFAULT '[]',
                 source_id TEXT,
                 is_poll_or_form INTEGER NOT NULL DEFAULT 0,
-                owner_id TEXT NOT NULL DEFAULT 'local-demo'
+                owner_id TEXT NOT NULL DEFAULT 'local-demo',
+                workspace_id INTEGER
             )
             """
         )
@@ -87,7 +89,8 @@ def initialize_database() -> None:
                 created_at TEXT NOT NULL,
                 question_bank_archived_path TEXT,
                 unit_notes_archived_path TEXT,
-                owner_id TEXT NOT NULL DEFAULT 'local-demo'
+                owner_id TEXT NOT NULL DEFAULT 'local-demo',
+                workspace_id INTEGER
             )
             """
         )
@@ -101,6 +104,7 @@ def initialize_database() -> None:
                 status TEXT NOT NULL DEFAULT 'pending',
                 created_at TEXT NOT NULL,
                 owner_id TEXT NOT NULL DEFAULT 'local-demo',
+                workspace_id INTEGER,
                 FOREIGN KEY (item_id) REFERENCES items(id)
             )
             """
@@ -115,7 +119,8 @@ def initialize_database() -> None:
                 approach TEXT NOT NULL,
                 test_cases TEXT NOT NULL,
                 created_at TEXT NOT NULL,
-                owner_id TEXT NOT NULL DEFAULT 'local-demo'
+                owner_id TEXT NOT NULL DEFAULT 'local-demo',
+                workspace_id INTEGER
             )
             """
         )
@@ -128,6 +133,7 @@ def initialize_database() -> None:
                 last_success_at TEXT,
                 last_error TEXT,
                 last_imported_count INTEGER,
+                workspace_id INTEGER,
                 PRIMARY KEY (owner_id, source)
             )
             """
@@ -137,11 +143,16 @@ def initialize_database() -> None:
         _add_column_if_missing(connection, "items", "source_id", "TEXT")
         _add_column_if_missing(connection, "items", "is_poll_or_form", "INTEGER NOT NULL DEFAULT 0")
         _add_column_if_missing(connection, "items", "owner_id", "TEXT NOT NULL DEFAULT 'local-demo'")
+        _add_column_if_missing(connection, "items", "workspace_id", "INTEGER")
         _add_column_if_missing(connection, "study_plans", "question_bank_archived_path", "TEXT")
         _add_column_if_missing(connection, "study_plans", "unit_notes_archived_path", "TEXT")
         _add_column_if_missing(connection, "study_plans", "owner_id", "TEXT NOT NULL DEFAULT 'local-demo'")
+        _add_column_if_missing(connection, "study_plans", "workspace_id", "INTEGER")
         _add_column_if_missing(connection, "pending_actions", "owner_id", "TEXT NOT NULL DEFAULT 'local-demo'")
+        _add_column_if_missing(connection, "pending_actions", "workspace_id", "INTEGER")
         _add_column_if_missing(connection, "assignment_help", "owner_id", "TEXT NOT NULL DEFAULT 'local-demo'")
+        _add_column_if_missing(connection, "assignment_help", "workspace_id", "INTEGER")
+        _add_column_if_missing(connection, "source_sync_status", "workspace_id", "INTEGER")
         connection.execute("DROP INDEX IF EXISTS idx_items_source_id")
         connection.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_items_owner_source_id "
@@ -159,28 +170,28 @@ def _initialize_postgres_database() -> None:
                 reason TEXT NOT NULL, deadline TEXT, mandatory BOOLEAN, source TEXT NOT NULL,
                 created_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', archived_path TEXT,
                 attachments TEXT NOT NULL DEFAULT '[]', source_id TEXT, is_poll_or_form BOOLEAN NOT NULL DEFAULT FALSE,
-                owner_id TEXT NOT NULL
+                owner_id TEXT NOT NULL, workspace_id BIGINT
             )
         """)
         connection.execute("""
             CREATE TABLE IF NOT EXISTS study_plans (
                 id BIGSERIAL PRIMARY KEY, topic TEXT NOT NULL, weight INTEGER NOT NULL,
                 subtopics TEXT NOT NULL, created_at TEXT NOT NULL, question_bank_archived_path TEXT,
-                unit_notes_archived_path TEXT, owner_id TEXT NOT NULL
+                unit_notes_archived_path TEXT, owner_id TEXT NOT NULL, workspace_id BIGINT
             )
         """)
         connection.execute("""
             CREATE TABLE IF NOT EXISTS pending_actions (
                 id BIGSERIAL PRIMARY KEY, item_id BIGINT NOT NULL REFERENCES items(id),
                 action_type TEXT NOT NULL, payload TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
-                created_at TEXT NOT NULL, owner_id TEXT NOT NULL
+                created_at TEXT NOT NULL, owner_id TEXT NOT NULL, workspace_id BIGINT
             )
         """)
         connection.execute("""
             CREATE TABLE IF NOT EXISTS assignment_help (
                 id BIGSERIAL PRIMARY KEY, prompt TEXT NOT NULL, requirements TEXT NOT NULL,
                 concepts TEXT NOT NULL, approach TEXT NOT NULL, test_cases TEXT NOT NULL,
-                created_at TEXT NOT NULL, owner_id TEXT NOT NULL
+                created_at TEXT NOT NULL, owner_id TEXT NOT NULL, workspace_id BIGINT
             )
         """)
         connection.execute("""
@@ -191,6 +202,7 @@ def _initialize_postgres_database() -> None:
                 last_success_at TEXT,
                 last_error TEXT,
                 last_imported_count INTEGER,
+                workspace_id BIGINT,
                 PRIMARY KEY (owner_id, source)
             )
         """)
@@ -231,6 +243,7 @@ def create_item(
     source: str = "manual",
     source_id: str | None = None,
     owner_id: str = DEFAULT_OWNER_ID,
+    workspace_id: int | None = None,
 ) -> dict[str, Any] | None:
     """Persist one classified item and return the stored record."""
     if source not in VALID_ITEM_SOURCES:
@@ -240,9 +253,9 @@ def create_item(
         insert_query = """
             INSERT INTO items (
                 text, category, reason, deadline, mandatory, source,
-                created_at, status, archived_path, attachments, source_id, is_poll_or_form, owner_id
+                created_at, status, archived_path, attachments, source_id, is_poll_or_form, owner_id, workspace_id
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?)
         """
         cursor = connection.execute(
             f"{insert_query} RETURNING id" if USING_POSTGRES else insert_query,
@@ -259,6 +272,7 @@ def create_item(
                 source_id,
                 bool(classification.get("is_poll_or_form", False)),
                 owner_id,
+                workspace_id,
             ),
         )
         item_id = cursor.fetchone()["id"] if USING_POSTGRES else cursor.lastrowid
@@ -301,6 +315,7 @@ def record_source_sync(
     imported_count: int | None = None,
     error_message: str | None = None,
     owner_id: str = DEFAULT_OWNER_ID,
+    workspace_id: int | None = None,
 ) -> None:
     """Store the outcome of one user-requested, read-only source sync."""
     if source not in SOURCE_SYNC_SOURCES:
@@ -312,8 +327,8 @@ def record_source_sync(
         connection.execute(
             """
             INSERT INTO source_sync_status (
-                owner_id, source, last_attempt_at, last_success_at, last_error, last_imported_count
-            ) VALUES (?, ?, ?, ?, ?, ?)
+                owner_id, source, last_attempt_at, last_success_at, last_error, last_imported_count, workspace_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (owner_id, source) DO UPDATE SET
                 last_attempt_at = excluded.last_attempt_at,
                 last_success_at = CASE
@@ -324,9 +339,10 @@ def record_source_sync(
                 last_imported_count = CASE
                     WHEN excluded.last_imported_count IS NOT NULL THEN excluded.last_imported_count
                     ELSE source_sync_status.last_imported_count
-                END
+                END,
+                workspace_id = COALESCE(excluded.workspace_id, source_sync_status.workspace_id)
             """,
-            (owner_id, source, attempted_at, successful_at, safe_error, imported_count),
+            (owner_id, source, attempted_at, successful_at, safe_error, imported_count, workspace_id),
         )
 
 
@@ -494,7 +510,11 @@ def mark_done(item_id: int, owner_id: str = DEFAULT_OWNER_ID) -> bool:
 
 
 def create_pending_action(
-    item_id: int, action_type: str, payload: dict[str, Any], owner_id: str = DEFAULT_OWNER_ID
+    item_id: int,
+    action_type: str,
+    payload: dict[str, Any],
+    owner_id: str = DEFAULT_OWNER_ID,
+    workspace_id: int | None = None,
 ) -> dict[str, Any]:
     """Create one pending action, or reuse an identical action awaiting review."""
     with _connection() as connection:
@@ -517,12 +537,12 @@ def create_pending_action(
             return _row_to_pending_action(existing)
 
         insert_query = """
-            INSERT INTO pending_actions (item_id, action_type, payload, status, created_at, owner_id)
-            VALUES (?, ?, ?, 'pending', ?, ?)
+            INSERT INTO pending_actions (item_id, action_type, payload, status, created_at, owner_id, workspace_id)
+            VALUES (?, ?, ?, 'pending', ?, ?, ?)
         """
         cursor = connection.execute(
             f"{insert_query} RETURNING id" if USING_POSTGRES else insert_query,
-            (item_id, action_type, json.dumps(payload), datetime.now().astimezone().isoformat(), owner_id),
+            (item_id, action_type, json.dumps(payload), datetime.now().astimezone().isoformat(), owner_id, workspace_id),
         )
         action_id = cursor.fetchone()["id"] if USING_POSTGRES else cursor.lastrowid
         row = connection.execute(
@@ -592,6 +612,7 @@ def replace_study_plan(
     question_bank_archived_path: str | None = None,
     unit_notes_archived_path: str | None = None,
     owner_id: str = DEFAULT_OWNER_ID,
+    workspace_id: int | None = None,
 ) -> list[dict[str, Any]]:
     """Store the latest study plan, replacing the previous local plan."""
     created_at = datetime.now().astimezone().isoformat()
@@ -601,9 +622,9 @@ def replace_study_plan(
             """
             INSERT INTO study_plans (
                 topic, weight, subtopics, created_at,
-                question_bank_archived_path, unit_notes_archived_path, owner_id
+                question_bank_archived_path, unit_notes_archived_path, owner_id, workspace_id
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 (
@@ -614,6 +635,7 @@ def replace_study_plan(
                     question_bank_archived_path,
                     unit_notes_archived_path,
                     owner_id,
+                    workspace_id,
                 )
                 for topic in topics
             ],
@@ -640,13 +662,18 @@ def get_study_plan(owner_id: str = DEFAULT_OWNER_ID) -> list[dict[str, Any]]:
     ]
 
 
-def create_assignment_help(prompt: str, scaffold: dict[str, Any], owner_id: str = DEFAULT_OWNER_ID) -> dict[str, Any] | None:
+def create_assignment_help(
+    prompt: str,
+    scaffold: dict[str, Any],
+    owner_id: str = DEFAULT_OWNER_ID,
+    workspace_id: int | None = None,
+) -> dict[str, Any] | None:
     """Persist one assignment scaffold and return its stored record."""
     created_at = datetime.now().astimezone().isoformat()
     with _connection() as connection:
         insert_query = """
-            INSERT INTO assignment_help (prompt, requirements, concepts, approach, test_cases, created_at, owner_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO assignment_help (prompt, requirements, concepts, approach, test_cases, created_at, owner_id, workspace_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """
         cursor = connection.execute(
             f"{insert_query} RETURNING id" if USING_POSTGRES else insert_query,
@@ -658,6 +685,7 @@ def create_assignment_help(prompt: str, scaffold: dict[str, Any], owner_id: str 
                 json.dumps(scaffold["test_cases"]),
                 created_at,
                 owner_id,
+                workspace_id,
             ),
         )
         assignment_id = cursor.fetchone()["id"] if USING_POSTGRES else cursor.lastrowid

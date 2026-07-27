@@ -45,6 +45,7 @@ from hosted_auth import (
     revoke_session,
     save_push_subscription,
     session_user,
+    workspace_for_user,
 )
 from rate_limit import RateLimiter
 from reminder_schedule import parse_deadline
@@ -118,6 +119,10 @@ async def require_demo_auth(request: Request, call_next):
         if not owner_id:
             return JSONResponse(status_code=401, content={"detail": "Authentication required."})
         request.state.owner_id = owner_id
+        workspace_id = workspace_for_user(owner_id)
+        if workspace_id is None:
+            return JSONResponse(status_code=503, content={"detail": "Workspace setup is incomplete. Please try again."})
+        request.state.workspace_id = workspace_id
         request.state.session_token = token
         if not _allow_request(request, _authenticated_rate_limit(request.url.path), owner_id):
             return _too_many_requests()
@@ -125,6 +130,7 @@ async def require_demo_auth(request: Request, call_next):
     if token not in VALID_SESSION_TOKENS:
         return JSONResponse(status_code=401, content={"detail": "Authentication required."})
     request.state.owner_id = DEFAULT_OWNER_ID
+    request.state.workspace_id = None
     request.state.session_token = token
     if not _allow_request(request, _authenticated_rate_limit(request.url.path), DEFAULT_OWNER_ID):
         return _too_many_requests()
@@ -351,6 +357,7 @@ async def ingest(request: Request) -> dict:
             classification,
             archived_path if content_type.startswith("multipart/form-data") else None,
             owner_id=request.state.owner_id,
+            workspace_id=request.state.workspace_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -421,12 +428,13 @@ def sync_gmail(request: Request) -> dict[str, int]:
                 source="gmail",
                 source_id=message["id"],
                 owner_id=request.state.owner_id,
+                workspace_id=request.state.workspace_id,
             )
             processed += 1
-        record_source_sync("gmail", succeeded=True, imported_count=processed, owner_id=request.state.owner_id)
+        record_source_sync("gmail", succeeded=True, imported_count=processed, owner_id=request.state.owner_id, workspace_id=request.state.workspace_id)
         return {"processed": processed, "skipped": skipped}
     except RuntimeError as exc:
-        record_source_sync("gmail", succeeded=False, error_message="The Gmail sync could not finish. Retry when ready.", owner_id=request.state.owner_id)
+        record_source_sync("gmail", succeeded=False, error_message="The Gmail sync could not finish. Retry when ready.", owner_id=request.state.owner_id, workspace_id=request.state.workspace_id)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
@@ -450,12 +458,13 @@ def sync_classroom(request: Request) -> dict[str, int]:
                 source="classroom",
                 source_id=item["id"],
                 owner_id=request.state.owner_id,
+                workspace_id=request.state.workspace_id,
             )
             processed += 1
-        record_source_sync("classroom", succeeded=True, imported_count=processed, owner_id=request.state.owner_id)
+        record_source_sync("classroom", succeeded=True, imported_count=processed, owner_id=request.state.owner_id, workspace_id=request.state.workspace_id)
         return {"processed": processed, "skipped": skipped}
     except RuntimeError as exc:
-        record_source_sync("classroom", succeeded=False, error_message="The Classroom sync could not finish. Retry when ready.", owner_id=request.state.owner_id)
+        record_source_sync("classroom", succeeded=False, error_message="The Classroom sync could not finish. Retry when ready.", owner_id=request.state.owner_id, workspace_id=request.state.workspace_id)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
@@ -477,6 +486,7 @@ def load_whatsapp_demo_data(request: Request) -> dict[str, int | bool | str]:
                 source=WHATSAPP_DEMO_SOURCE,
                 source_id=f"whatsapp-demo-{index}",
                 owner_id=request.state.owner_id,
+                workspace_id=request.state.workspace_id,
             )
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -507,6 +517,7 @@ def request_queue_item_completion(item_id: int, request: Request) -> dict:
         action_type="mark_done",
         payload=payload,
         owner_id=request.state.owner_id,
+        workspace_id=request.state.workspace_id,
     )
 
 
@@ -532,6 +543,7 @@ def request_form_draft(item_id: int, request: Request) -> dict:
             "form_fields": draft["fields"],
         },
         owner_id=request.state.owner_id,
+        workspace_id=request.state.workspace_id,
     )
 
 
@@ -579,7 +591,8 @@ async def upload_study_materials(request: Request) -> dict[str, list[dict]]:
         topics = build_study_plan(question_bank, unit_notes)
         return {
             "topics": replace_study_plan(
-                topics, question_bank_archived_path, unit_notes_archived_path, request.state.owner_id
+                topics, question_bank_archived_path, unit_notes_archived_path,
+                request.state.owner_id, request.state.workspace_id,
             )
         }
     except ValueError as exc:
@@ -642,7 +655,9 @@ async def assignment_help(request: Request) -> dict:
         if len(prompt) > 5000:
             raise ValueError("Assignment prompt is too long.")
         scaffold = scaffold_assignment(prompt)
-        saved_scaffold = create_assignment_help(prompt, scaffold, request.state.owner_id)
+        saved_scaffold = create_assignment_help(
+            prompt, scaffold, request.state.owner_id, request.state.workspace_id
+        )
         if not saved_scaffold:
             raise RuntimeError("Could not save the assignment scaffold.")
         return saved_scaffold
