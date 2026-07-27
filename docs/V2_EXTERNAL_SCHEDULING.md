@@ -8,8 +8,8 @@ rows. It does not fetch a provider, classify a message, or make an external chan
 
 ## Scheduling behavior
 
-- Enabled hosted Gmail/Classroom connections are considered at their configured
-  interval (minimum 15 minutes).
+- Enabled hosted Gmail/Classroom connections with an explicit source selection are
+  considered at their configured interval (minimum 15 minutes).
 - Each connection maps to a deterministic UTC time-window idempotency key. Repeated,
   delayed, or overlapping cron calls in the same window return the existing job.
 - Paused connections are excluded, and pausing cancels queued or leased jobs.

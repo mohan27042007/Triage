@@ -10,7 +10,10 @@ from google_client import get_google_credentials
 
 
 def fetch_recent_classroom_items(
-    max_courses: int = 10, max_announcements_per_course: int = 5, owner_id: str | None = None
+    max_courses: int = 10,
+    max_announcements_per_course: int = 5,
+    owner_id: str | None = None,
+    selected_course_ids: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Return recent active-course items with any attached Drive files."""
     credentials = get_google_credentials(owner_id)
@@ -25,6 +28,8 @@ def fetch_recent_classroom_items(
     items: list[dict[str, str]] = []
     for course in courses_response.get("courses", []):
         course_id = course["id"]
+        if selected_course_ids and course_id not in selected_course_ids:
+            continue
         course_name = course.get("name", "Untitled course")
         announcements = service.courses().announcements().list(
             courseId=course_id,

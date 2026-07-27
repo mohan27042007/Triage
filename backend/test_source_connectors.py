@@ -8,7 +8,7 @@ import source_connectors
 class SourceConnectorTests(unittest.TestCase):
     def test_gmail_adapter_preserves_normalized_items_and_cursor(self) -> None:
         original_fetch = source_connectors.fetch_recent_gmail_messages
-        source_connectors.fetch_recent_gmail_messages = lambda owner_id: [
+        source_connectors.fetch_recent_gmail_messages = lambda **kwargs: [
             {"id": "message-1", "text": "Deadline Friday", "attachments": [{"filename": "brief.pdf"}]}
         ]
         try:
@@ -25,7 +25,7 @@ class SourceConnectorTests(unittest.TestCase):
 
     def test_classroom_adapter_preserves_normalized_items_and_cursor(self) -> None:
         original_fetch = source_connectors.fetch_recent_classroom_items
-        source_connectors.fetch_recent_classroom_items = lambda owner_id: [
+        source_connectors.fetch_recent_classroom_items = lambda **kwargs: [
             {"id": "classroom:coursework:1:2", "text": "Read chapter", "attachments": []}
         ]
         try:
@@ -43,7 +43,7 @@ class SourceConnectorTests(unittest.TestCase):
             source_connectors.get_source_connector("slack")
 
         original_fetch = source_connectors.fetch_recent_gmail_messages
-        source_connectors.fetch_recent_gmail_messages = lambda owner_id: [{"id": "message-1", "text": "", "attachments": []}]
+        source_connectors.fetch_recent_gmail_messages = lambda **kwargs: [{"id": "message-1", "text": "", "attachments": []}]
         try:
             with self.assertRaisesRegex(RuntimeError, "invalid normalized item"):
                 source_connectors.get_source_connector("gmail").fetch_changes(

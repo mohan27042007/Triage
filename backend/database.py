@@ -473,6 +473,30 @@ def get_source_connection(source: str, *, owner_id: str = DEFAULT_OWNER_ID) -> d
     return _row_to_source_connection(row) if row else None
 
 
+def get_source_connection_runtime(source: str, *, owner_id: str = DEFAULT_OWNER_ID) -> dict[str, Any] | None:
+    """Return non-secret connection state for an internal worker, never for API output."""
+    if source not in VALID_CONNECTED_SOURCES:
+        raise ValueError("Unsupported source connection.")
+    with _connection() as connection:
+        row = connection.execute(
+            """
+            SELECT source, owner_id, workspace_id, state, selected_channels, provider_cursor
+            FROM source_connections WHERE owner_id = ? AND source = ?
+            """,
+            (owner_id, source),
+        ).fetchone()
+    if row is None:
+        return None
+    return {
+        "source": row["source"],
+        "owner_id": row["owner_id"],
+        "workspace_id": row["workspace_id"],
+        "state": row["state"],
+        "selected_channels": json.loads(row["selected_channels"]),
+        "provider_cursor": row["provider_cursor"],
+    }
+
+
 def get_source_connections(owner_id: str = DEFAULT_OWNER_ID) -> list[dict[str, Any]]:
     """Return source-connection health for one owner."""
     with _connection() as connection:
@@ -520,7 +544,7 @@ def record_source_connection_outcome(
     succeeded: bool,
     error_message: str | None = None,
     owner_id: str = DEFAULT_OWNER_ID,
-) -> None:
+) -> bool:
     """Update connection health after a manual or future worker-driven sync."""
     if source not in VALID_CONNECTED_SOURCES:
         raise ValueError("Unsupported source connection.")
@@ -539,6 +563,26 @@ def record_source_connection_outcome(
             """,
             (attempted_at, succeeded, attempted_at, safe_error, succeeded, attempted_at, owner_id, source),
         )
+        connection_row = connection.execute(
+            "SELECT consecutive_failures FROM source_connections WHERE owner_id = ? AND source = ?",
+            (owner_id, source),
+        ).fetchone()
+        paused = bool(not succeeded and connection_row and connection_row["consecutive_failures"] >= 5)
+        if paused:
+            connection.execute(
+                "UPDATE source_connections SET state = 'paused', updated_at = ? WHERE owner_id = ? AND source = ?",
+                (attempted_at, owner_id, source),
+            )
+            connection.execute(
+                """
+                UPDATE sync_jobs
+                SET state = 'cancelled', lease_token = NULL, lease_expires_at = NULL,
+                    completed_at = ?, updated_at = ?
+                WHERE source = ? AND owner_id = ? AND state IN ('queued', 'running')
+                """,
+                (attempted_at, attempted_at, source, owner_id),
+            )
+    return paused
 
 
 def _row_to_source_connection(row: sqlite3.Row) -> dict[str, Any]:

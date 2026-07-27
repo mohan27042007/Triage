@@ -83,6 +83,12 @@ Gmail and Classroom manual sync now use a shared normalized connector contract w
 remaining read-only and user-requested. See `docs/V2_CONNECTOR_ABSTRACTION.md` for
 the explicit cursor boundary and staging verification steps.
 
+## V2 autonomous Google pilot
+
+An opt-in, workspace-allowlisted worker can now read explicitly selected Gmail or
+Classroom sources only after the synthetic evaluation gate passes. See
+`docs/V2_AUTONOMOUS_GOOGLE_PILOT.md` before configuring any pilot worker.
+
 ## Stack
 
 | Layer | Current implementation |

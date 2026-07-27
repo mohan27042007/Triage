@@ -11,11 +11,13 @@ from attachment_archive import MAX_ARCHIVE_BYTES
 from google_client import get_google_credentials
 
 
-def fetch_recent_gmail_messages(max_results: int = 15, owner_id: str | None = None) -> list[dict[str, Any]]:
+def fetch_recent_gmail_messages(
+    max_results: int = 15, owner_id: str | None = None, label_ids: list[str] | None = None
+) -> list[dict[str, Any]]:
     """Return recent inbox messages plus downloadable, non-inline attachments."""
     service = build("gmail", "v1", credentials=get_google_credentials(owner_id), cache_discovery=False)
     response = service.users().messages().list(
-        userId="me", labelIds=["INBOX"], maxResults=max_results
+        userId="me", labelIds=label_ids or ["INBOX"], maxResults=max_results
     ).execute()
 
     messages: list[dict[str, str]] = []

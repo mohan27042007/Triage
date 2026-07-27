@@ -17,7 +17,6 @@ from attachment_archive import (
     MAX_ARCHIVE_BYTES,
     archive_attachment,
     archived_file_exists,
-    archive_source_attachments,
     original_filename_from_archive,
     read_archived_file,
 )
@@ -47,7 +46,7 @@ from hosted_auth import (
 )
 from rate_limit import RateLimiter
 from reminder_schedule import parse_deadline
-from source_connectors import SourceConnection, get_source_connector
+from source_ingestion import ingest_source_changes
 from whatsapp_demo_data import WHATSAPP_DEMO_MESSAGES, WHATSAPP_DEMO_SOURCE
 from database import (
     create_assignment_help,
@@ -472,37 +471,15 @@ def _sync_source(source: str, display_name: str, request: Request) -> dict[str, 
     if is_source_connection_paused(source, owner_id=request.state.owner_id):
         raise HTTPException(status_code=409, detail=f"{display_name} is paused. Resume it before syncing.")
     try:
-        result = get_source_connector(source).fetch_changes(
-            SourceConnection(
-                source=source,
-                owner_id=request.state.owner_id,
-                workspace_id=request.state.workspace_id,
-            ),
-            cursor=None,
+        outcome = ingest_source_changes(
+            source,
+            owner_id=request.state.owner_id,
+            workspace_id=request.state.workspace_id,
+            archive_directory=ARCHIVE_DIRECTORY,
         )
-        processed = 0
-        skipped = 0
-        for item in result.items:
-            if get_item_by_source_id(
-                source, item.source_id, owner_id=request.state.owner_id, workspace_id=request.state.workspace_id
-            ):
-                skipped += 1
-                continue
-            create_item(
-                item.text,
-                classify(item.text),
-                attachments=archive_source_attachments(
-                    ARCHIVE_DIRECTORY, item.attachments, request.state.owner_id
-                ),
-                source=source,
-                source_id=item.source_id,
-                owner_id=request.state.owner_id,
-                workspace_id=request.state.workspace_id,
-            )
-            processed += 1
-        record_source_sync(source, succeeded=True, imported_count=processed, owner_id=request.state.owner_id, workspace_id=request.state.workspace_id)
+        record_source_sync(source, succeeded=True, imported_count=outcome["processed"], owner_id=request.state.owner_id, workspace_id=request.state.workspace_id)
         record_source_connection_outcome(source, succeeded=True, owner_id=request.state.owner_id)
-        return {"processed": processed, "skipped": skipped}
+        return {"processed": outcome["processed"], "skipped": outcome["skipped"]}
     except RuntimeError as exc:
         error_message = f"The {display_name} sync could not finish. Retry when ready."
         record_source_sync(source, succeeded=False, error_message=error_message, owner_id=request.state.owner_id, workspace_id=request.state.workspace_id)

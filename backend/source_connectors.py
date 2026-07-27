@@ -52,7 +52,10 @@ class GmailConnector:
 
     def fetch_changes(self, connection: SourceConnection, cursor: str | None) -> FetchResult:
         _require_source(connection, self.source_name)
-        messages = fetch_recent_gmail_messages(owner_id=connection.owner_id)
+        labels = [channel.upper() for channel in connection.selected_channels] or None
+        if labels and set(labels) != {"INBOX"}:
+            raise RuntimeError("Gmail autonomous collection currently supports only the inbox label.")
+        messages = fetch_recent_gmail_messages(owner_id=connection.owner_id, label_ids=labels)
         return FetchResult(items=_normalize_items(messages), next_cursor=cursor)
 
     def validate_connection(self, connection: SourceConnection) -> ConnectionHealth:
@@ -72,7 +75,8 @@ class ClassroomConnector:
 
     def fetch_changes(self, connection: SourceConnection, cursor: str | None) -> FetchResult:
         _require_source(connection, self.source_name)
-        items = fetch_recent_classroom_items(owner_id=connection.owner_id)
+        selected_courses = set(connection.selected_channels) or None
+        items = fetch_recent_classroom_items(owner_id=connection.owner_id, selected_course_ids=selected_courses)
         return FetchResult(items=_normalize_items(items), next_cursor=cursor)
 
     def validate_connection(self, connection: SourceConnection) -> ConnectionHealth:
@@ -101,18 +105,20 @@ def get_source_connector(source: str) -> SourceConnector:
         raise ValueError("Unsupported source connector.") from exc
 
 
-def fetch_recent_gmail_messages(*, owner_id: str) -> list[dict[str, Any]]:
+def fetch_recent_gmail_messages(*, owner_id: str, label_ids: list[str] | None = None) -> list[dict[str, Any]]:
     """Load the optional Gmail integration only when a Gmail connector runs."""
     from gmail_sync import fetch_recent_gmail_messages as fetch
 
-    return fetch(owner_id=owner_id)
+    return fetch(owner_id=owner_id, label_ids=label_ids)
 
 
-def fetch_recent_classroom_items(*, owner_id: str) -> list[dict[str, Any]]:
+def fetch_recent_classroom_items(
+    *, owner_id: str, selected_course_ids: set[str] | None = None
+) -> list[dict[str, Any]]:
     """Load the optional Classroom integration only when its connector runs."""
     from classroom_sync import fetch_recent_classroom_items as fetch
 
-    return fetch(owner_id=owner_id)
+    return fetch(owner_id=owner_id, selected_course_ids=selected_course_ids)
 
 
 def get_google_credentials(owner_id: str):

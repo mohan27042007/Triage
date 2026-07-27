@@ -22,7 +22,8 @@ class SyncJobTests(unittest.TestCase):
         database._connection = self._temporary_connection
         database.initialize_database()
         database.enable_source_connection(
-            "gmail", "google-connection:student-a", owner_id="student-a", workspace_id=101
+            "gmail", "google-connection:student-a", owner_id="student-a", workspace_id=101,
+            selected_channels=["inbox"],
         )
 
     def _temporary_connection(self) -> sqlite3.Connection:
@@ -108,6 +109,31 @@ class SyncJobTests(unittest.TestCase):
         self.assertEqual(first["job_ids"], duplicate_window["job_ids"])
         self.assertNotEqual(first["job_ids"], next_window["job_ids"])
         self.assertEqual(paused, {"connections_considered": 0, "job_ids": []})
+
+    def test_five_source_failures_pause_connection_and_cancel_remaining_jobs(self) -> None:
+        pending = self._enqueue("student-a:gmail:circuit-breaker")
+        for _ in range(5):
+            database.record_source_connection_outcome(
+                "gmail", succeeded=False, error_message="provider_unavailable", owner_id="student-a"
+            )
+
+        connection = database.get_source_connection("gmail", owner_id="student-a")
+        self.assertEqual(connection["state"], "paused")
+        self.assertEqual(connection["consecutive_failures"], 5)
+        self.assertEqual(sync_jobs.get_sync_job(pending["id"])["state"], "cancelled")
+
+    def test_worker_records_specific_safe_executor_error_code(self) -> None:
+        self._enqueue("student-a:gmail:policy-block")
+
+        class PilotBlockedError(RuntimeError):
+            error_code = "workspace_not_in_google_pilot"
+
+        result = sync_jobs.run_once(
+            lambda job: (_ for _ in ()).throw(PilotBlockedError()), worker_id="worker-one"
+        )
+
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["job"]["last_error_code"], "workspace_not_in_google_pilot")
 
 
 if __name__ == "__main__":

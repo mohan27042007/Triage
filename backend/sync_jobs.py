@@ -59,7 +59,7 @@ def enqueue_due_sync_jobs(*, now: str | None = None) -> dict[str, Any]:
     with database._connection() as connection:
         connections = connection.execute(
             """
-            SELECT owner_id, workspace_id, source, sync_interval_minutes
+            SELECT owner_id, workspace_id, source, selected_channels, sync_interval_minutes
             FROM source_connections
             WHERE state = 'enabled' AND workspace_id IS NOT NULL
             ORDER BY workspace_id ASC, source ASC
@@ -67,6 +67,9 @@ def enqueue_due_sync_jobs(*, now: str | None = None) -> dict[str, Any]:
         ).fetchall()
     job_ids: list[int] = []
     for connection in connections:
+        selected_channels = json.loads(connection["selected_channels"])
+        if not isinstance(selected_channels, list) or not selected_channels:
+            continue
         interval_minutes = int(connection["sync_interval_minutes"])
         window_start = _schedule_window_start(scheduled_at, interval_minutes)
         job = enqueue_sync_job(
@@ -79,7 +82,7 @@ def enqueue_due_sync_jobs(*, now: str | None = None) -> dict[str, Any]:
             available_at=scheduled_at.isoformat(),
         )
         job_ids.append(int(job["id"]))
-    return {"connections_considered": len(connections), "job_ids": job_ids}
+    return {"connections_considered": len(job_ids), "job_ids": job_ids}
 
 
 def claim_next_sync_job(
@@ -236,8 +239,9 @@ def run_once(executor: Callable[[dict[str, Any]], dict[str, Any] | None], *, wor
         return {"status": "idle"}
     try:
         outcome = executor(job) or {}
-    except Exception:
-        failed = fail_sync_job(job["id"], job["lease_token"], "worker_execution_failed")
+    except Exception as exc:
+        error_code = getattr(exc, "error_code", "worker_execution_failed")
+        failed = fail_sync_job(job["id"], job["lease_token"], error_code)
         return {"status": "failed", "job": failed}
     completed = complete_sync_job(job["id"], job["lease_token"], outcome)
     return {"status": "succeeded", "job": completed}
