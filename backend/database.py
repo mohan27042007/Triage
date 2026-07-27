@@ -14,6 +14,8 @@ DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 USING_POSTGRES = DATABASE_URL.startswith(("postgres://", "postgresql://"))
 DEFAULT_OWNER_ID = "local-demo"
 VALID_ITEM_SOURCES = {"manual", "gmail", "classroom", "whatsapp-demo"}
+VALID_CONNECTED_SOURCES = {"gmail", "classroom"}
+VALID_SOURCE_CONNECTION_STATES = {"enabled", "paused"}
 SCHEMA_MIGRATION_IDS = (
     "2026-07-26-data-safeguards-v1",
     "2026-07-26-source-health-v1",
@@ -136,6 +138,27 @@ def initialize_database() -> None:
                 last_error TEXT,
                 last_imported_count INTEGER,
                 workspace_id INTEGER,
+                PRIMARY KEY (owner_id, source)
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS source_connections (
+                owner_id TEXT NOT NULL,
+                workspace_id INTEGER,
+                source TEXT NOT NULL,
+                credential_ref TEXT NOT NULL,
+                state TEXT NOT NULL DEFAULT 'enabled',
+                selected_channels TEXT NOT NULL DEFAULT '[]',
+                sync_interval_minutes INTEGER NOT NULL DEFAULT 30,
+                provider_cursor TEXT,
+                consecutive_failures INTEGER NOT NULL DEFAULT 0,
+                last_attempt_at TEXT,
+                last_success_at TEXT,
+                last_error TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
                 PRIMARY KEY (owner_id, source)
             )
             """
@@ -323,6 +346,140 @@ def get_source_sync_status(owner_id: str = DEFAULT_OWNER_ID) -> dict[str, dict[s
             "last_imported_count": row["last_imported_count"],
         }
         for row in rows
+    }
+
+
+def enable_source_connection(
+    source: str,
+    credential_ref: str,
+    *,
+    owner_id: str = DEFAULT_OWNER_ID,
+    workspace_id: int | None = None,
+    selected_channels: list[str] | None = None,
+    sync_interval_minutes: int = 30,
+) -> dict[str, Any]:
+    """Persist an enabled source connection without storing provider credentials."""
+    if source not in VALID_CONNECTED_SOURCES:
+        raise ValueError("Unsupported source connection.")
+    if not isinstance(credential_ref, str) or not credential_ref.strip():
+        raise ValueError("Source connections require a credential reference.")
+    if not 15 <= sync_interval_minutes <= 1_440:
+        raise ValueError("Sync interval must be between 15 and 1440 minutes.")
+    channels = selected_channels or []
+    if not isinstance(channels, list) or not all(isinstance(channel, str) and channel.strip() for channel in channels):
+        raise ValueError("Selected channels must be a list of non-empty names.")
+    now = datetime.now().astimezone().isoformat()
+    with _connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO source_connections (
+                owner_id, workspace_id, source, credential_ref, state, selected_channels,
+                sync_interval_minutes, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, 'enabled', ?, ?, ?, ?)
+            ON CONFLICT (owner_id, source) DO UPDATE SET
+                workspace_id = COALESCE(excluded.workspace_id, source_connections.workspace_id),
+                credential_ref = excluded.credential_ref,
+                state = 'enabled',
+                selected_channels = excluded.selected_channels,
+                sync_interval_minutes = excluded.sync_interval_minutes,
+                updated_at = excluded.updated_at
+            """,
+            (
+                owner_id,
+                workspace_id,
+                source,
+                credential_ref.strip(),
+                json.dumps(channels),
+                sync_interval_minutes,
+                now,
+                now,
+            ),
+        )
+    connection_record = get_source_connection(source, owner_id=owner_id)
+    if connection_record is None:
+        raise RuntimeError("Could not save source connection.")
+    return connection_record
+
+
+def get_source_connection(source: str, *, owner_id: str = DEFAULT_OWNER_ID) -> dict[str, Any] | None:
+    """Return one source connection without exposing its credential reference."""
+    with _connection() as connection:
+        row = connection.execute(
+            "SELECT * FROM source_connections WHERE owner_id = ? AND source = ?", (owner_id, source)
+        ).fetchone()
+    return _row_to_source_connection(row) if row else None
+
+
+def get_source_connections(owner_id: str = DEFAULT_OWNER_ID) -> list[dict[str, Any]]:
+    """Return source-connection health for one owner."""
+    with _connection() as connection:
+        rows = connection.execute(
+            "SELECT * FROM source_connections WHERE owner_id = ? ORDER BY source ASC", (owner_id,)
+        ).fetchall()
+    return [_row_to_source_connection(row) for row in rows]
+
+
+def set_source_connection_state(
+    source: str, state: str, *, owner_id: str = DEFAULT_OWNER_ID
+) -> dict[str, Any] | None:
+    """Pause or resume a saved source connection without deleting its configuration."""
+    if source not in VALID_CONNECTED_SOURCES or state not in VALID_SOURCE_CONNECTION_STATES:
+        raise ValueError("Unsupported source connection state.")
+    with _connection() as connection:
+        cursor = connection.execute(
+            "UPDATE source_connections SET state = ?, updated_at = ? WHERE owner_id = ? AND source = ?",
+            (state, datetime.now().astimezone().isoformat(), owner_id, source),
+        )
+    if cursor.rowcount != 1:
+        return None
+    return get_source_connection(source, owner_id=owner_id)
+
+
+def is_source_connection_paused(source: str, *, owner_id: str = DEFAULT_OWNER_ID) -> bool:
+    connection = get_source_connection(source, owner_id=owner_id)
+    return connection is not None and connection["state"] == "paused"
+
+
+def record_source_connection_outcome(
+    source: str,
+    *,
+    succeeded: bool,
+    error_message: str | None = None,
+    owner_id: str = DEFAULT_OWNER_ID,
+) -> None:
+    """Update connection health after a manual or future worker-driven sync."""
+    if source not in VALID_CONNECTED_SOURCES:
+        raise ValueError("Unsupported source connection.")
+    attempted_at = datetime.now().astimezone().isoformat()
+    safe_error = (error_message or "").strip()[:160] or None
+    with _connection() as connection:
+        connection.execute(
+            """
+            UPDATE source_connections SET
+                last_attempt_at = ?,
+                last_success_at = CASE WHEN ? THEN ? ELSE last_success_at END,
+                last_error = ?,
+                consecutive_failures = CASE WHEN ? THEN 0 ELSE consecutive_failures + 1 END,
+                updated_at = ?
+            WHERE owner_id = ? AND source = ?
+            """,
+            (attempted_at, succeeded, attempted_at, safe_error, succeeded, attempted_at, owner_id, source),
+        )
+
+
+def _row_to_source_connection(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "source": row["source"],
+        "workspace_id": row["workspace_id"],
+        "state": row["state"],
+        "selected_channels": json.loads(row["selected_channels"]),
+        "sync_interval_minutes": row["sync_interval_minutes"],
+        "provider_cursor_configured": bool(row["provider_cursor"]),
+        "consecutive_failures": row["consecutive_failures"],
+        "last_attempt_at": row["last_attempt_at"],
+        "last_success_at": row["last_success_at"],
+        "last_error": row["last_error"],
+        "has_credential": bool(row["credential_ref"]),
     }
 
 

@@ -54,6 +54,7 @@ from database import (
     create_assignment_help,
     create_item,
     create_pending_action,
+    enable_source_connection,
     approve_pending_action,
     get_item,
     get_item_by_source_id,
@@ -66,11 +67,15 @@ from database import (
     get_recent_items,
     get_pending_actions,
     get_source_sync_status,
+    get_source_connections,
     get_study_plan,
     initialize_database,
+    is_source_connection_paused,
+    record_source_connection_outcome,
     reject_pending_action,
     record_source_sync,
     replace_study_plan,
+    set_source_connection_state,
     DEFAULT_OWNER_ID,
 )
 
@@ -405,12 +410,57 @@ def source_status(request: Request) -> dict[str, object]:
     return {
         "google_authorized": authorized,
         "sources": get_source_sync_status(request.state.owner_id),
+        "connections": get_source_connections(request.state.owner_id),
     }
+
+
+@app.post("/sources/{source}/connection/enable")
+async def enable_connection(source: str, request: Request) -> dict:
+    """Save an enabled read-only Google source connection for this workspace."""
+    if source not in {"gmail", "classroom"}:
+        raise HTTPException(status_code=404, detail="Unsupported source connection.")
+    authorized = has_google_connection(request.state.owner_id) if hosted_auth_enabled() else TOKEN_PATH.is_file()
+    if not authorized:
+        raise HTTPException(status_code=409, detail="Connect Google before enabling this source.")
+    payload: dict = {}
+    if request.headers.get("content-type", "").startswith("application/json"):
+        try:
+            received = await request.json()
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Invalid JSON body.") from exc
+        if not isinstance(received, dict):
+            raise HTTPException(status_code=400, detail="Connection settings must be a JSON object.")
+        payload = received
+    try:
+        return enable_source_connection(
+            source,
+            f"google-connection:{request.state.owner_id}" if hosted_auth_enabled() else "local-google-token",
+            owner_id=request.state.owner_id,
+            workspace_id=request.state.workspace_id,
+            selected_channels=payload.get("selected_channels"),
+            sync_interval_minutes=payload.get("sync_interval_minutes", 30),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/sources/{source}/connection/pause")
+def pause_connection(source: str, request: Request) -> dict:
+    """Pause a source without deleting its provider configuration or health history."""
+    try:
+        connection = set_source_connection_state(source, "paused", owner_id=request.state.owner_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if connection is None:
+        raise HTTPException(status_code=404, detail="Source connection not found.")
+    return connection
 
 
 @app.post("/sources/gmail/sync")
 def sync_gmail(request: Request) -> dict[str, int]:
     """Classify new inbox messages while preserving Gmail IDs for deduplication."""
+    if is_source_connection_paused("gmail", owner_id=request.state.owner_id):
+        raise HTTPException(status_code=409, detail="Gmail is paused. Resume it before syncing.")
     try:
         messages = fetch_recent_gmail_messages(owner_id=request.state.owner_id)
         processed = 0
@@ -432,15 +482,19 @@ def sync_gmail(request: Request) -> dict[str, int]:
             )
             processed += 1
         record_source_sync("gmail", succeeded=True, imported_count=processed, owner_id=request.state.owner_id, workspace_id=request.state.workspace_id)
+        record_source_connection_outcome("gmail", succeeded=True, owner_id=request.state.owner_id)
         return {"processed": processed, "skipped": skipped}
     except RuntimeError as exc:
         record_source_sync("gmail", succeeded=False, error_message="The Gmail sync could not finish. Retry when ready.", owner_id=request.state.owner_id, workspace_id=request.state.workspace_id)
+        record_source_connection_outcome("gmail", succeeded=False, error_message="The Gmail sync could not finish. Retry when ready.", owner_id=request.state.owner_id)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.post("/sources/classroom/sync")
 def sync_classroom(request: Request) -> dict[str, int]:
     """Classify new Classroom items while preserving IDs for deduplication."""
+    if is_source_connection_paused("classroom", owner_id=request.state.owner_id):
+        raise HTTPException(status_code=409, detail="Google Classroom is paused. Resume it before syncing.")
     try:
         items = fetch_recent_classroom_items(owner_id=request.state.owner_id)
         processed = 0
@@ -462,9 +516,11 @@ def sync_classroom(request: Request) -> dict[str, int]:
             )
             processed += 1
         record_source_sync("classroom", succeeded=True, imported_count=processed, owner_id=request.state.owner_id, workspace_id=request.state.workspace_id)
+        record_source_connection_outcome("classroom", succeeded=True, owner_id=request.state.owner_id)
         return {"processed": processed, "skipped": skipped}
     except RuntimeError as exc:
         record_source_sync("classroom", succeeded=False, error_message="The Classroom sync could not finish. Retry when ready.", owner_id=request.state.owner_id, workspace_id=request.state.workspace_id)
+        record_source_connection_outcome("classroom", succeeded=False, error_message="The Classroom sync could not finish. Retry when ready.", owner_id=request.state.owner_id)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 

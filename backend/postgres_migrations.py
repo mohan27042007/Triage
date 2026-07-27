@@ -103,6 +103,43 @@ def _create_hosted_auth_schema(connection) -> None:
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
     """)
+
+
+def _create_source_connections(connection) -> None:
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS source_connections (
+            owner_id TEXT NOT NULL,
+            workspace_id BIGINT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+            source TEXT NOT NULL CHECK (source IN ('gmail', 'classroom')),
+            credential_ref TEXT NOT NULL,
+            state TEXT NOT NULL DEFAULT 'enabled' CHECK (state IN ('enabled', 'paused')),
+            selected_channels TEXT NOT NULL DEFAULT '[]',
+            sync_interval_minutes INTEGER NOT NULL DEFAULT 30 CHECK (sync_interval_minutes BETWEEN 15 AND 1440),
+            provider_cursor TEXT,
+            consecutive_failures INTEGER NOT NULL DEFAULT 0 CHECK (consecutive_failures >= 0),
+            last_attempt_at TEXT,
+            last_success_at TEXT,
+            last_error TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (owner_id, source),
+            UNIQUE (workspace_id, source)
+        )
+    """)
+    connection.execute("""
+        INSERT INTO source_connections (
+            owner_id, workspace_id, source, credential_ref, state, last_attempt_at,
+            last_success_at, last_error, created_at, updated_at
+        )
+        SELECT source_sync_status.owner_id, source_sync_status.workspace_id,
+               source_sync_status.source, 'google-connection:' || source_sync_status.owner_id,
+               'enabled', source_sync_status.last_attempt_at, source_sync_status.last_success_at,
+               source_sync_status.last_error, NOW(), NOW()
+        FROM source_sync_status
+        WHERE source_sync_status.workspace_id IS NOT NULL
+          AND source_sync_status.source IN ('gmail', 'classroom')
+        ON CONFLICT (owner_id, source) DO NOTHING
+    """)
     connection.execute("""
         CREATE TABLE IF NOT EXISTS google_connections (
             user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
@@ -147,4 +184,5 @@ CORE_POSTGRES_MIGRATIONS = (
 HOSTED_POSTGRES_MIGRATIONS = (
     PostgresMigration("2026-07-26-hosted-auth-schema-v1", _create_hosted_auth_schema),
     PostgresMigration("2026-07-27-personal-workspaces-v1", initialize_workspace_foundation),
+    PostgresMigration("2026-07-27-source-connections-v1", _create_source_connections),
 )

@@ -53,6 +53,12 @@ Hosted PostgreSQL schema changes now use ordered, recorded, advisory-lock-protec
 migrations. See `docs/V2_POSTGRES_MIGRATIONS.md` for the staging-first deployment,
 verification, and forward-only rollback procedure.
 
+## V2 source connections
+
+Gmail and Classroom now have server-persisted, pause/resume-able connection records
+with workspace scope and sync health. See `docs/V2_SOURCE_CONNECTIONS.md`; this does
+not enable background syncing yet.
+
 ## Stack
 
 | Layer | Current implementation |
