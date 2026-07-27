@@ -65,6 +65,12 @@ Imported items now deduplicate by workspace, provider, and provider item ID, so 
 IDs from Gmail and Classroom do not collide. See `docs/V2_SOURCE_DEDUPLICATION.md`
 for the data-preserving migration and staging checks.
 
+## V2 durable job queue
+
+Hosted source work now has a durable, leased PostgreSQL job model with idempotency
+and bounded retries. It does not schedule or autonomously sync sources yet; see
+`docs/V2_DURABLE_JOB_QUEUE.md` for the worker and deployment contract.
+
 ## Stack
 
 | Layer | Current implementation |

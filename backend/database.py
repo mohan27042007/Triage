@@ -163,6 +163,34 @@ def initialize_database() -> None:
             )
             """
         )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sync_jobs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                workspace_id INTEGER NOT NULL,
+                owner_id TEXT NOT NULL,
+                source TEXT NOT NULL CHECK (source IN ('gmail', 'classroom')),
+                idempotency_key TEXT NOT NULL,
+                state TEXT NOT NULL CHECK (state IN ('queued', 'running', 'succeeded', 'failed', 'cancelled')),
+                attempt_count INTEGER NOT NULL DEFAULT 0,
+                max_attempts INTEGER NOT NULL DEFAULT 5 CHECK (max_attempts BETWEEN 1 AND 5),
+                available_at TEXT NOT NULL,
+                lease_token TEXT,
+                lease_expires_at TEXT,
+                started_at TEXT,
+                completed_at TEXT,
+                outcome TEXT,
+                last_error_code TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE (workspace_id, source, idempotency_key)
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_sync_jobs_claim "
+            "ON sync_jobs(state, available_at, lease_expires_at)"
+        )
         _add_column_if_missing(connection, "items", "archived_path", "TEXT")
         _add_column_if_missing(connection, "items", "attachments", "TEXT NOT NULL DEFAULT '[]'")
         _add_column_if_missing(connection, "items", "source_id", "TEXT")
@@ -460,13 +488,24 @@ def set_source_connection_state(
     """Pause or resume a saved source connection without deleting its configuration."""
     if source not in VALID_CONNECTED_SOURCES or state not in VALID_SOURCE_CONNECTION_STATES:
         raise ValueError("Unsupported source connection state.")
+    now = datetime.now().astimezone().isoformat()
     with _connection() as connection:
         cursor = connection.execute(
             "UPDATE source_connections SET state = ?, updated_at = ? WHERE owner_id = ? AND source = ?",
-            (state, datetime.now().astimezone().isoformat(), owner_id, source),
+            (state, now, owner_id, source),
         )
-    if cursor.rowcount != 1:
-        return None
+        if cursor.rowcount != 1:
+            return None
+        if state == "paused":
+            connection.execute(
+                """
+                UPDATE sync_jobs
+                SET state = 'cancelled', lease_token = NULL, lease_expires_at = NULL,
+                    completed_at = ?, updated_at = ?
+                WHERE source = ? AND owner_id = ? AND state IN ('queued', 'running')
+                """,
+                (now, now, source, owner_id),
+            )
     return get_source_connection(source, owner_id=owner_id)
 
 

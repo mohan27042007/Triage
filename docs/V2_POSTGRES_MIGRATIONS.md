@@ -56,3 +56,4 @@ SELECT id, applied_at FROM postgres_schema_migrations ORDER BY applied_at, id;
 | `2026-07-27-personal-workspaces-v1` | Personal workspaces, memberships, and idempotent workspace backfill. |
 | `2026-07-27-source-connections-v1` | Workspace-scoped Gmail/Classroom connection configuration and health. |
 | `2026-07-27-workspace-source-dedupe-v1` | Replaces obsolete item indexes with provider-aware workspace deduplication. |
+| `2026-07-27-workspace-sync-jobs-v1` | Durable workspace/source sync jobs with idempotency keys, leases, and retry state. |

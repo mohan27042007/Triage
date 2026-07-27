@@ -211,6 +211,36 @@ def _correct_item_dedupe(connection) -> None:
     )
 
 
+def _create_sync_jobs(connection) -> None:
+    """Create the durable, leased job ledger without scheduling source work."""
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS sync_jobs (
+            id BIGSERIAL PRIMARY KEY,
+            workspace_id BIGINT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+            owner_id TEXT NOT NULL,
+            source TEXT NOT NULL CHECK (source IN ('gmail', 'classroom')),
+            idempotency_key TEXT NOT NULL,
+            state TEXT NOT NULL CHECK (state IN ('queued', 'running', 'succeeded', 'failed', 'cancelled')),
+            attempt_count INTEGER NOT NULL DEFAULT 0,
+            max_attempts INTEGER NOT NULL DEFAULT 5 CHECK (max_attempts BETWEEN 1 AND 5),
+            available_at TIMESTAMPTZ NOT NULL,
+            lease_token TEXT,
+            lease_expires_at TIMESTAMPTZ,
+            started_at TIMESTAMPTZ,
+            completed_at TIMESTAMPTZ,
+            outcome JSONB,
+            last_error_code TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE (workspace_id, source, idempotency_key)
+        )
+    """)
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sync_jobs_claim "
+        "ON sync_jobs(state, available_at, lease_expires_at)"
+    )
+
+
 CORE_POSTGRES_MIGRATIONS = (
     PostgresMigration("2026-07-26-core-schema-v1", _create_core_schema),
     PostgresMigration("2026-07-27-core-workspace-columns-v1", _ensure_core_workspace_columns),
@@ -221,4 +251,5 @@ HOSTED_POSTGRES_MIGRATIONS = (
     PostgresMigration("2026-07-27-personal-workspaces-v1", initialize_workspace_foundation),
     PostgresMigration("2026-07-27-source-connections-v1", _create_source_connections),
     PostgresMigration("2026-07-27-workspace-source-dedupe-v1", _correct_item_dedupe),
+    PostgresMigration("2026-07-27-workspace-sync-jobs-v1", _create_sync_jobs),
 )
